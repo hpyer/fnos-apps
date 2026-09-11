@@ -1,0 +1,9 @@
+[
+  {
+    "stepTitle": "DSH for fnOS",
+    "items": [
+      { "type": "text", "field": "wizard_port", "label": "DSH 访问端口", "initValue": "3080", "rules": [{ "required": true, "message": "请输入 1024–65535 的端口" }, { "pattern": "^[0-9]{4,5}$", "message": "请输入 1024–65535 的端口" }] },
+      { "type": "tips", "helpText": "管理员共用一个 DSH 实例。首次启动需要联网下载 latest 版本并安装 dsh-market，耗时取决于网络。端口和更新标签可在 DSH 顶部状态岛的设置中修改。" }
+    ]
+  }
+]

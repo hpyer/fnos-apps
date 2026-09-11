@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DSH for fnOS 设置</title><link rel="stylesheet" href="./admin.css"></head>
+<body>
+  <div class="top-status" aria-label="DSH for fnOS 状态">
+    <span id="runtime" aria-live="polite">正在读取状态…</span>
+    <button id="restart" class="icon-button" type="button" data-action="restart" data-tooltip="重启 DSH" aria-label="重启 DSH" disabled></button>
+    <button id="open" class="icon-button" type="button" data-tooltip="返回 DSH" aria-label="返回 DSH" disabled></button>
+  </div>
+  <main>
+    <p id="notice" role="status" hidden></p>
+    <div class="workspace-grid">
+      <section class="panel versions-panel" aria-labelledby="versions-title">
+        <div class="section-head"><div><p class="eyebrow">运行时</p><h1 id="versions-title">本地版本 <span id="count">0 / 5</span><span class="limit">最多保留 5 个版本</span></h1></div><button data-action="check">检查更新</button></div>
+        <p class="hint">下载后选择启用；当前版本会保留，切换失败会尝试恢复。</p>
+        <div id="releases" class="releases"></div>
+        <div id="versions"><p class="empty">正在读取已安装版本…</p></div>
+        <form id="download-form" class="download"><label for="version">下载指定版本</label><div class="input-row"><input id="version" name="version" placeholder="例如 0.1.5-rc.1" required autocomplete="off"><button type="submit">下载</button></div></form>
+      </section>
+      <aside class="side-stack">
+        <section class="panel settings-panel" aria-labelledby="runtime-title">
+          <div class="section-head"><div><p class="eyebrow">连接</p><h2 id="runtime-title">运行设置</h2></div></div>
+          <form id="settings-form">
+            <div class="form-grid">
+              <label for="port">访问端口<input id="port" name="port" type="number" min="1024" max="65535" required></label>
+            </div>
+            <fieldset><legend>检查更新标签</legend><div class="channels"><label class="check"><input type="checkbox" checked disabled>latest <span>默认</span></label><label class="check"><input type="checkbox" name="channel" value="alpha">alpha</label><label class="check"><input type="checkbox" name="channel" value="beta">beta</label><label class="check"><input type="checkbox" name="channel" value="next">next</label></div></fieldset>
+            <label for="registry">npm 源<select id="registry" name="registry" required><option value="https://mirrors.cloud.tencent.com/npm">腾讯云</option><option value="https://registry.npmmirror.com">npmmirror</option><option value="https://registry.yarnpkg.com">Yarn</option><option value="https://registry.npmjs.org">官方源</option></select></label>
+            <p class="hint">仅影响本应用；重启 DSH 后，运行中的插件才会使用新源。</p><button type="submit" class="primary save-button">保存运行设置</button>
+          </form>
+        </section>
+        <section class="panel compact-panel"><div><p class="eyebrow">扩展</p><h2>插件市场</h2><p id="market-status" class="hint">初次启动会自动安装 dsh-market。</p></div><button data-action="market">重新安装</button></section>
+      </aside>
+    </div>
+  </main><script type="module" src="./admin.js"></script>
+</body></html>

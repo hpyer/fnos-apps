@@ -1,0 +1,7 @@
+#!/bin/bash
+set -eu
+export PATH="/var/apps/nodejs_v24/target/bin:${PATH}"
+if ! node "${TRIM_APPDEST}/setup.mjs"; then
+  echo '配置失败，请检查访问端口是否为 1024–65535 的整数。' > "${TRIM_TEMP_LOGFILE}"
+  exit 1
+fi

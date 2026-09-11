@@ -1,0 +1,15 @@
+{
+  ".url": {
+    "dsh-for-fnos.Application": {
+      "title": "DSH for fnOS",
+      "icon": "images/dsh_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/dsh-for-fnos",
+      "gatewaySocket": "app.sock",
+      "url": "/app/dsh-for-fnos/",
+      "allUsers": false,
+      "control": { "accessPerm": "readonly" }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Changelog
+
+此文件记录 DSH for fnOS 面向用户的发布变更。每次发布都必须新增与应用版本一致的 `## [版本]` 条目；GitHub Release 会直接使用该条目的内容。
+
+## [1.0.0]
+
+### Added
+
+- 支持在 fnOS 内下载、校验、保留、启用和回退多个 DSH 版本，本地最多保留 5 个已完成版本。
+- 支持 `latest`、`alpha`、`beta`、`next` 更新标签、可选 npm 源，以及首次自动安装 dsh-market。
+- 将 DSH 与设置页整合到同一应用窗口，并提供统一状态岛、重启和设置入口。
+- 将 DSH 工作区、配置、插件和会话保存在飞牛共享目录，方便备份和维护。
+- 保留官方 DSH profile 与插件 API，代理透传插件资源、HTTP API、SSE 和 WebSocket。
+- DSH 应用图标、原生入口和双架构 FPK 打包流程已适配 fnOS。

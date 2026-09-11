@@ -1,0 +1,3 @@
+#!/bin/bash
+# fnOS owns the surrounding stop/start and data-retention lifecycle.
+exit 0
