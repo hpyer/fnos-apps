@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.local/
+*.fpk
+.DS_Store
+.pnpm-store/
+*.tgz
+
+# Runtime logs and test reports
+*.log
+logs/
+coverage/
+.nyc_output/
+
+# Local caches
+.cache/
+.turbo/
+.eslintcache
+
+# Developer-specific configuration
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/

@@ -1,0 +1,124 @@
+name: Build and publish fnOS app
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: Application slug under apps/
+        required: true
+        type: string
+      version:
+        description: Version from the application tag
+        required: true
+        type: string
+      tag:
+        description: Application-specific release tag
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      architectures: ${{ steps.meta.outputs.architectures }}
+      file_prefix: ${{ steps.meta.outputs.file_prefix }}
+      release_title: ${{ steps.meta.outputs.release_title }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Resolve application metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP='${{ inputs.app }}'
+          test -d "apps/$APP"
+          test -f "scripts/apps/$APP/meta.env"
+          source "scripts/apps/$APP/meta.env"
+          arches='[]'
+          for arch in ${SUPPORTED_ARCH:-x86}; do
+            case "$arch" in
+              x86|arm) arches="$(jq -c --arg arch "$arch" '. + [$arch]' <<<"$arches")" ;;
+              *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+            esac
+          done
+          test "$arches" != '[]'
+          echo "architectures=$arches" >> "$GITHUB_OUTPUT"
+          echo "file_prefix=${FILE_PREFIX:-$APP}" >> "$GITHUB_OUTPUT"
+          echo "release_title=${RELEASE_TITLE:-${DISPLAY_NAME:-$APP}}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.metadata.outputs.architectures) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install verified fnpack
+        run: bash scripts/install-fnpack.sh "${RUNNER_TEMP}/fnpack"
+        env:
+          FNPACK_VERSION: 1.2.3
+          FNPACK_SHA256: 54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93
+      - name: Build application
+        run: pnpm run build '${{ inputs.app }}'
+      - name: Pack FPK
+        run: node scripts/pack.mjs '${{ inputs.app }}' --arch '${{ matrix.arch }}' --version '${{ inputs.version }}' --output dist/release
+        env:
+          FNPACK_BIN: ${{ runner.temp }}/fnpack
+      - name: Upload FPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpk-${{ inputs.app }}-${{ matrix.arch }}
+          path: dist/release/*.fpk
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download FPK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fpk-${{ inputs.app }}-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -n "$(find artifacts -name '*.fpk' -print -quit)"
+          sha256sum artifacts/*.fpk > artifacts/SHA256SUMS
+          node scripts/release.mjs notes '${{ inputs.app }}' --version '${{ inputs.version }}' --tag '${{ inputs.tag }}' > "$RUNNER_TEMP/release-notes.md"
+          if gh release view '${{ inputs.tag }}' >/dev/null 2>&1; then
+            gh release upload '${{ inputs.tag }}' artifacts/*.fpk artifacts/SHA256SUMS --clobber
+          else
+            gh release create '${{ inputs.tag }}' artifacts/*.fpk artifacts/SHA256SUMS \
+              --title '${{ needs.metadata.outputs.release_title }} ${{ inputs.version }} for fnOS' \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

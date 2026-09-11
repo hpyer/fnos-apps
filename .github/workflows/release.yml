@@ -1,0 +1,74 @@
+name: Release fnOS app
+
+on:
+  push:
+    tags:
+      - '*/v*'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Application slug, for example dsh
+        required: true
+        type: string
+      version:
+        description: Version already present in the application manifest
+        required: true
+        type: string
+      revision:
+        description: Optional repack revision, for example r1
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      app: ${{ steps.release.outputs.app }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Resolve application tag
+        id: release
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_APP: ${{ inputs.app }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = push ]; then
+            TAG="$REF_NAME"
+            APP="${TAG%%/v*}"
+            VERSION="${TAG#*/v}"
+            VERSION="$(sed -E 's/-r[0-9]+$//' <<<"$VERSION")"
+          else
+            APP="$INPUT_APP"
+            VERSION="$INPUT_VERSION"
+            REVISION="${INPUT_REVISION:-}"
+            REVISION="${REVISION#r}"
+            TAG="${APP}/v${VERSION}"
+            [ -z "$REVISION" ] || TAG="${TAG}-r${REVISION}"
+          fi
+          test -d "apps/$APP"
+          test -f "scripts/apps/$APP/meta.env"
+          node scripts/release.mjs check "$APP" --version "$VERSION" --tag "$TAG"
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build-and-publish:
+    needs: resolve
+    uses: ./.github/workflows/reusable-build-app.yml
+    with:
+      app: ${{ needs.resolve.outputs.app }}
+      version: ${{ needs.resolve.outputs.version }}
+      tag: ${{ needs.resolve.outputs.tag }}
+    secrets: inherit
