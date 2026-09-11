@@ -2,12 +2,11 @@
 
 这是一个使用 pnpm workspace 管理飞牛 fnOS 原生应用的多应用仓库。每个应用在 `apps/<slug>` 中独立开发、测试和发布；通用脚本、双架构打包和 GitHub Actions 工作流由根目录统一维护。
 
-## 文档导航
+## 应用
 
-- [应用开发与发布约定](docs/app-development.md)：创建应用、构建、打包、版本与 CI/CD。
-- [DSH for fnOS](apps/dsh/README.md)：首个应用的功能、开发、安装与运行数据说明。
-- [DSH 架构](apps/dsh/docs/architecture.md)：网关、进程、版本事务与插件兼容策略。
-- [DSH 实机验收](apps/dsh/docs/acceptance.md)：本机验证记录与 NAS 验收清单。
+| 应用名称 | 版本号 | 应用介绍 | 下载 |
+| --- | --- | --- | --- |
+| [DSH for fnOS](apps/dsh/README.md) | `1.0.0` | 在飞牛 NAS 上管理管理员共用的 DeepSeek Harness 实例，支持多版本下载、切换、重启、插件市场和官方插件 API。 | [GitHub Release](https://github.com/hpyer/fnos-apps/releases?q=dsh%2Fv&expanded=true) |
 
 ## 快速开始
 
@@ -45,7 +44,7 @@ apps/<slug>/             单个应用的源码、原生清单、测试和应用�
 apps/<slug>/native/      fnOS manifest、入口、权限、向导和资源
 apps/<slug>/docs/        应用架构、验收与运行说明
 scripts/                 通用脚手架、构建、打包、发布与 fnpack 安装器
-scripts/apps/<slug>/     应用发布元数据与 Release Notes 模板
+scripts/apps/<slug>/     应用发布元数据
 docs/                    workspace 通用开发与发布文档
 .github/workflows/       CI、应用标签发布及可复用双架构构建
 ```

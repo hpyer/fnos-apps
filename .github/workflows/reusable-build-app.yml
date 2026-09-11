@@ -119,6 +119,6 @@ jobs:
             gh release upload '${{ inputs.tag }}' artifacts/*.fpk artifacts/SHA256SUMS --clobber
           else
             gh release create '${{ inputs.tag }}' artifacts/*.fpk artifacts/SHA256SUMS \
-              --title '${{ needs.metadata.outputs.release_title }} ${{ inputs.version }} for fnOS' \
+              --title '${{ needs.metadata.outputs.release_title }} v${{ inputs.version }}' \
               --notes-file "$RUNNER_TEMP/release-notes.md"
           fi

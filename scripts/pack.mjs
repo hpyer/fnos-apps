@@ -53,7 +53,7 @@ for (const arch of architectures) {
     const candidates = await findFpk(stagingRoot);
     if (!candidates.length) throw new Error(`fnpack 没有生成新的 FPK 文件（${arch}）`);
     candidates.sort((left, right) => right.mtimeMs - left.mtimeMs);
-    const target = path.join(outputDir, `${app.filePrefix}_${version}_${arch}.fpk`);
+    const target = path.join(outputDir, `${app.filePrefix}_v${version}_${arch}.fpk`);
     await rm(target, { force: true });
     await rename(candidates[0].path, target);
     console.log(`已打包 ${target}`);
