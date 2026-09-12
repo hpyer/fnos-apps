@@ -10,32 +10,27 @@
 
 ## 快速开始
 
-要求 Node.js 24+、pnpm 11.22.0；本地打包还需要全局安装 `fnpack`。
+要求 Node.js 24+、pnpm 11.22.0；本地打包还需要可执行的 `fnpack`。
 
 ```sh
+# 安装依赖并运行全仓测试
 pnpm install
 pnpm test
 
-# 本地开发指定应用
+# 本地开发 DSH
 pnpm run dev dsh
 
-# 构建、打包与发布前检查指定应用
+# 构建并打包 DSH 的全部支持架构
 pnpm run build dsh
 pnpm run pack dsh --all
+
+# 发布前检查
 pnpm run check dsh
 ```
 
-所有通用命令都必须将应用标识作为第一个参数；仓库不会默认选择 DSH 或其它应用。
+操作单个应用时必须显式传入应用标识，例如 `dsh`；仓库不会默认选择某个应用。
 
-## 新建应用
-
-```sh
-pnpm run create demo "示例应用" 8080
-pnpm run build demo
-pnpm run pack demo --all
-```
-
-脚手架会创建 `apps/demo` workspace 及 `scripts/apps/demo` 发布元数据。后续应用可使用独立的标签命名空间，例如 `demo/v1.0.0`；标签触发的发布只构建对应应用的 x86 和 arm FPK。
+完整的参数、单应用测试、`fnpack` 配置、脚手架和发布标签用法见[命令使用手册](docs/commands.md)。应用开发和发布约定见[开发文档](docs/app-development.md)。
 
 ## 仓库结构
 
