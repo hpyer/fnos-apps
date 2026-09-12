@@ -18,6 +18,16 @@ test('readiness exchanges the DSH launch token and verifies the authenticated in
   assert.equal(await probe(url), true);
   assert.equal(await probe(new URL('/', url)), false);
 });
+test('owned process can observe a market operation through its authenticated session', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-market-'));
+  const entry = path.join(root, 'fixture.mjs');
+  await writeFile(entry, `import http from 'node:http'; let polls=0; const s=http.createServer((q,r)=>{if(q.url==='/dsh-market/status'){r.setHeader('content-type','application/json');return r.end(JSON.stringify({active:++polls===1,busy:false}))}r.end('ok')});s.listen(0,'127.0.0.1',()=>console.log('dsh web: http://127.0.0.1:'+s.address().port+'/'));`);
+  const process = new DshProcess({ ...globalThis.process.env });
+  t.after(async () => { await process.stop(); await rm(root, { recursive: true, force: true }); });
+  await process.start(entry, root);
+  assert.equal(await process.pluginOperationActive(), true);
+  assert.equal(await process.pluginOperationActive(), false);
+});
 test('owned worker starts and stops a real child server', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-'));
   const entry = path.join(root, 'fixture.mjs');

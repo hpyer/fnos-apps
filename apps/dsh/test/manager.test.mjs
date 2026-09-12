@@ -84,6 +84,21 @@ test('a completed web-profile plugin operation is restarted by the supervisor', 
   assert.equal(closed, true);
 });
 
+test('plugin restart waits until dsh-market has finished its update response', async t => {
+  const { manager } = await fixture(t);
+  manager.pluginRestartDelay = 1;
+  let active = true;
+  manager.process.pluginOperationActive = async () => active;
+  const actions = [];
+  manager.dispatch = async action => { actions.push(action); };
+  manager.schedulePluginRestart();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(actions, []);
+  active = false;
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(actions, ['restart']);
+});
+
 test('moves the settings document into the declared fnOS data share', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-manager-share-'));
   const home = path.join(root, 'home/.dsh');

@@ -2,21 +2,22 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function probe(address) {
+async function authenticatedProbe(address) {
   const response = await fetch(address, { redirect: 'manual', signal: AbortSignal.timeout(1500) });
   await response.body?.cancel();
-  if (response.ok) return true;
+  if (response.ok) return { ok: true, cookie: '' };
   // Recent DSH exchanges its launch token for an HttpOnly cookie and a 303.
   // Node fetch does not maintain a cookie jar across redirects.
-  if (response.status !== 303 || response.headers.get('location') !== '/') return false;
+  if (response.status !== 303 || response.headers.get('location') !== '/') return { ok: false, cookie: '' };
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  if (!cookie) return false;
+  if (!cookie) return { ok: false, cookie: '' };
   const index = await fetch(new URL('/', address), { redirect: 'manual', headers: { cookie }, signal: AbortSignal.timeout(1500) });
   await index.body?.cancel();
-  return index.ok;
+  return { ok: index.ok, cookie: index.ok ? cookie : '' };
 }
+export async function probe(address) { return (await authenticatedProbe(address)).ok; }
 export class DshProcess {
-  constructor(environment) { this.environment = environment; this.child = null; this.address = null; }
+  constructor(environment) { this.environment = environment; this.child = null; this.address = null; this.authCookie = ''; }
   async start(entry, cwd, patch) {
     if (this.child) throw new Error('DSH 已在运行');
     this.address = null;
@@ -30,7 +31,9 @@ export class DshProcess {
     let line = '';
     let failure;
     child.once('error', error => { failure = error; if (this.child === child) this.child = null; });
-    child.once('exit', () => { if (this.child === child) { this.child = null; this.address = null; } });
+    child.once('exit', () => {
+      if (this.child === child) { this.child = null; this.address = null; this.authCookie = ''; }
+    });
     // Do not write the authenticated URL, prompts, or plugin output into manager logs.
     child.stdout.on('data', chunk => {
       line = (line + chunk.toString()).slice(-16384);
@@ -45,7 +48,11 @@ export class DshProcess {
       if (failure || this.child !== child) throw failure ?? new Error('DSH 启动时退出，请检查所选版本与插件兼容性');
       if (this.address) {
         try {
-          if (await probe(this.address) && this.child === child) { if (++healthy >= 3) return; }
+          const session = await authenticatedProbe(this.address);
+          if (session.ok && this.child === child) {
+            this.authCookie = session.cookie;
+            if (++healthy >= 3) return;
+          }
           else healthy = 0;
         } catch { healthy = 0; }
       }
@@ -54,14 +61,27 @@ export class DshProcess {
     await this.stop();
     throw new Error('DSH 启动检查超时（120 秒）');
   }
+  async pluginOperationActive() {
+    if (!this.address) return false;
+    try {
+      const response = await fetch(new URL('/dsh-market/status', this.address), {
+        headers: this.authCookie ? { cookie: this.authCookie } : {},
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!response.ok) { await response.body?.cancel(); return false; }
+      const status = await response.json();
+      return status.active === true || status.busy === true;
+    } catch { return false; }
+  }
   async stop() {
     const child = this.child;
-    if (!child) return;
+    if (!child) { this.authCookie = ''; return; }
     await new Promise(resolve => {
       const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 12_000);
       child.once('exit', () => { clearTimeout(timer); resolve(); });
       child.kill('SIGTERM');
     });
     if (this.child === child) { this.child = null; this.address = null; }
+    this.authCookie = '';
   }
 }

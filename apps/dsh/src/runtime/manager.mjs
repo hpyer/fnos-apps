@@ -192,6 +192,10 @@ export class Manager {
   async restartForPluginChange() {
     if (this.stopping || !this.state.current) return;
     if (this.busy) return this.schedulePluginRestart();
+    // pnpm can commit its lockfile before dsh-market finishes validation and
+    // writes the HTTP response. Stopping DSH in that window turns a successful
+    // update into a gateway 502, so wait for both command and route-level work.
+    if (await this.process.pluginOperationActive?.()) return this.schedulePluginRestart();
     try { await this.dispatch('restart'); }
     catch { /* manager.status() exposes the failure to the application UI */ }
   }
