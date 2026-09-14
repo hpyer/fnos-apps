@@ -61,17 +61,24 @@ export class DshProcess {
     await this.stop();
     throw new Error('DSH 启动检查超时（120 秒）');
   }
-  async pluginOperationActive() {
-    if (!this.address) return false;
+  async pluginOperationState() {
+    if (!this.address) return 'unavailable';
     try {
       const response = await fetch(new URL('/dsh-market/status', this.address), {
         headers: this.authCookie ? { cookie: this.authCookie } : {},
         signal: AbortSignal.timeout(2500),
       });
-      if (!response.ok) { await response.body?.cancel(); return false; }
+      if (!response.ok) { await response.body?.cancel(); return 'unavailable'; }
       const status = await response.json();
-      return status.active === true || status.busy === true;
-    } catch { return false; }
+      if (status.active === true || status.busy === true) return 'active';
+      if (status.active === false && (status.busy === false || status.busy === undefined)) return 'idle';
+      return 'unavailable';
+    } catch { return 'unavailable'; }
+  }
+  async pluginOperationActive() {
+    // A failed status check during package replacement is not evidence that the
+    // operation ended. Keep legacy boolean callers conservative as well.
+    return (await this.pluginOperationState()) !== 'idle';
   }
   async stop() {
     const child = this.child;

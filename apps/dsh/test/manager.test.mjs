@@ -99,6 +99,38 @@ test('plugin restart waits until dsh-market has finished its update response', a
   assert.deepEqual(actions, ['restart']);
 });
 
+test('plugin restart requires consecutive valid idle status checks', async t => {
+  const { manager } = await fixture(t);
+  manager.pluginRestartDelay = 1;
+  const states = ['unavailable', 'idle', 'active', 'idle', 'idle'];
+  manager.process.pluginOperationState = async () => states.shift() ?? 'idle';
+  const actions = [];
+  manager.dispatch = async action => { actions.push(action); };
+  manager.schedulePluginRestart();
+  await new Promise(resolve => setTimeout(resolve, 4));
+  assert.deepEqual(actions, []);
+  await new Promise(resolve => setTimeout(resolve, 15));
+  assert.deepEqual(actions, ['restart']);
+});
+
+test('a stale idle check cannot restart after a newer plugin change', async t => {
+  const { manager } = await fixture(t);
+  manager.pluginRestartDelay = 1;
+  manager.pluginRestartIdleRequired = 1;
+  let release;
+  manager.process.pluginOperationState = () => new Promise(resolve => { release = resolve; });
+  const actions = [];
+  manager.dispatch = async action => { actions.push(action); };
+  manager.schedulePluginRestart();
+  await new Promise(resolve => setTimeout(resolve, 4));
+  manager.pluginChangeGeneration += 1;
+  manager.process.pluginOperationState = async () => 'active';
+  release('idle');
+  await new Promise(resolve => setTimeout(resolve, 8));
+  assert.deepEqual(actions, []);
+  await manager.stop();
+});
+
 test('moves the settings document into the declared fnOS data share', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-manager-share-'));
   const home = path.join(root, 'home/.dsh');

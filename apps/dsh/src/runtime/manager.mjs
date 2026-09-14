@@ -19,8 +19,11 @@ export class Manager {
     this.execute = dependencies.execute ?? run;
     this.watch = dependencies.watch ?? watch;
     this.pluginRestartDelay = dependencies.pluginRestartDelay ?? 2_500;
+    this.pluginRestartIdleRequired = dependencies.pluginRestartIdleRequired ?? 2;
     this.profileWatcher = null;
     this.pluginRestartTimer = null;
+    this.pluginRestartIdleChecks = 0;
+    this.pluginChangeGeneration = 0;
     this.busy = null;
     this.error = null;
     this.releases = [];
@@ -173,6 +176,8 @@ export class Manager {
         // completed. It covers install, update and uninstall without reacting
         // to normal DSH settings or workspace writes.
         if (filename?.toString() !== 'pnpm-lock.yaml') return;
+        this.pluginChangeGeneration += 1;
+        this.pluginRestartIdleChecks = 0;
         this.schedulePluginRestart();
       });
     } catch (error) {
@@ -181,21 +186,39 @@ export class Manager {
       if (error.code !== 'ENOENT') this.error = `无法监测插件变更：${error.message}`;
     }
   }
-  schedulePluginRestart() {
+  schedulePluginRestart(generation = this.pluginChangeGeneration) {
     if (this.stopping || !this.state.current) return;
     clearTimeout(this.pluginRestartTimer);
     this.pluginRestartTimer = setTimeout(() => {
       this.pluginRestartTimer = null;
-      void this.restartForPluginChange();
+      void this.restartForPluginChange(generation);
     }, this.pluginRestartDelay);
   }
-  async restartForPluginChange() {
+  async pluginOperationState() {
+    if (this.process.pluginOperationState) return this.process.pluginOperationState();
+    if (this.process.pluginOperationActive) return await this.process.pluginOperationActive() ? 'active' : 'idle';
+    return 'idle';
+  }
+  async restartForPluginChange(generation = this.pluginChangeGeneration) {
     if (this.stopping || !this.state.current) return;
-    if (this.busy) return this.schedulePluginRestart();
+    if (generation !== this.pluginChangeGeneration) return this.schedulePluginRestart();
+    if (this.busy) {
+      this.pluginRestartIdleChecks = 0;
+      return this.schedulePluginRestart(generation);
+    }
     // pnpm can commit its lockfile before dsh-market finishes validation and
-    // writes the HTTP response. Stopping DSH in that window turns a successful
-    // update into a gateway 502, so wait for both command and route-level work.
-    if (await this.process.pluginOperationActive?.()) return this.schedulePluginRestart();
+    // writes the HTTP response. The market endpoint can also be briefly
+    // unavailable while pnpm replaces package files. Only consecutive, valid
+    // idle responses prove that the entire operation has settled.
+    const operation = await this.pluginOperationState();
+    if (generation !== this.pluginChangeGeneration) return this.schedulePluginRestart();
+    if (operation !== 'idle') {
+      this.pluginRestartIdleChecks = 0;
+      return this.schedulePluginRestart(generation);
+    }
+    this.pluginRestartIdleChecks += 1;
+    if (this.pluginRestartIdleChecks < this.pluginRestartIdleRequired) return this.schedulePluginRestart(generation);
+    this.pluginRestartIdleChecks = 0;
     try { await this.dispatch('restart'); }
     catch { /* manager.status() exposes the failure to the application UI */ }
   }
@@ -253,6 +276,7 @@ export class Manager {
   async stop() {
     this.stopping = true;
     clearTimeout(this.pluginRestartTimer);
+    this.pluginRestartIdleChecks = 0;
     this.profileWatcher?.close();
     this.profileWatcher = null;
     this.abort.abort();

@@ -25,8 +25,17 @@ test('owned process can observe a market operation through its authenticated ses
   const process = new DshProcess({ ...globalThis.process.env });
   t.after(async () => { await process.stop(); await rm(root, { recursive: true, force: true }); });
   await process.start(entry, root);
+  assert.equal(await process.pluginOperationState(), 'active');
+  assert.equal(await process.pluginOperationState(), 'idle');
+});
+test('an unavailable market status is never treated as a completed operation', async t => {
+  const server = http.createServer((_req, res) => { res.writeHead(503); res.end(); });
+  await listen(server, { host: '127.0.0.1', port: 0 });
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const process = new DshProcess({});
+  process.address = new URL(`http://127.0.0.1:${server.address().port}/`);
+  assert.equal(await process.pluginOperationState(), 'unavailable');
   assert.equal(await process.pluginOperationActive(), true);
-  assert.equal(await process.pluginOperationActive(), false);
 });
 test('owned worker starts and stops a real child server', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-'));
