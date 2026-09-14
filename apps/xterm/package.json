@@ -1,0 +1,22 @@
+{
+  "name": "@fnos/xterm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs && node ../../dist/xterm-for-fnos/app/main.mjs --dev",
+    "build": "node build.mjs",
+    "test": "node prepare-native.mjs && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@xterm/xterm": "6.0.0",
+    "@xterm/addon-fit": "0.11.0",
+    "node-pty": "1.1.0",
+    "ws": "8.21.3"
+  },
+  "fnos": {
+    "nativeModules": [
+      "app/node_modules/node-pty/prebuilds/linux-{arch}/pty.node"
+    ]
+  }
+}

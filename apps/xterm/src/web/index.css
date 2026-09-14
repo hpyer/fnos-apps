@@ -1,0 +1,149 @@
+@import "@xterm/xterm/css/xterm.css";
+:root {
+  color-scheme: dark;
+  font:
+    13px -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  background: #101112;
+  color: #ddd;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: #191b1e;
+  border-bottom: 1px solid #303236;
+}
+header img {
+  background: #fafafa;
+  border-radius: 4px;
+}
+h1 {
+  font-size: 17px;
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+h1 span {
+  font-weight: 400;
+  color: #a4a9b0;
+  font-size: 13px;
+}
+nav {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+button {
+  font: inherit;
+  padding: 7px 13px;
+  border: 1px solid #444950;
+  border-radius: 5px;
+  color: #ddd;
+  background: #24272c;
+  cursor: pointer;
+}
+button:hover {
+  background: #343940;
+}
+button.primary {
+  background: #387ba1;
+  border-color: #569dcc;
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 2px solid #68bbed;
+  outline-offset: 3px;
+}
+.context {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 20px;
+  color: #b2b7bd;
+  font-size: 12px;
+}
+#status {
+  color: #79bce3;
+}
+main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 14px;
+}
+#terminal {
+  height: 100%;
+  padding: 8px;
+}
+#empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  pointer-events: none;
+  color: #858c94;
+}
+#empty[hidden] {
+  display: none;
+}
+#empty strong {
+  color: #d7dbdf;
+  font-size: 20px;
+  font-weight: 500;
+}
+#empty p {
+  margin: 10px 20px 0;
+  text-align: center;
+}
+footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 20px;
+  color: #939aa3;
+  font-size: 11px;
+  border-top: 1px solid #26292d;
+}
+.xterm {
+  height: 100%;
+}
+@media (max-width: 560px) {
+  header {
+    padding: 10px;
+    gap: 7px;
+  }
+  h1 {
+    font-size: 14px;
+  }
+  h1 span {
+    display: none;
+  }
+  button {
+    padding: 7px 9px;
+  }
+  .context {
+    padding: 9px 12px;
+    flex-wrap: wrap;
+  }
+  main {
+    margin: 0 4px;
+  }
+}

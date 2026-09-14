@@ -1,0 +1,14 @@
+appname = xterm-for-fnos
+version = 1.0.0
+display_name = Xterm for fnOS
+desc = 管理员专用本机终端，以应用包用户运行 Bash，断开后结束会话。
+platform = x86
+source = thirdparty
+maintainer = hpyer
+distributor = hpyer
+desktop_uidir = ui
+desktop_applaunchname = xterm-for-fnos.Application
+install_dep_apps = nodejs_v24
+os_min_version = 1.1.3100
+checkport = false
+micro_app = true

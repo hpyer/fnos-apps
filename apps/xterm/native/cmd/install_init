@@ -1,0 +1,3 @@
+#!/bin/sh
+# fnOS owns application stop/start and data retention.
+exit 0
