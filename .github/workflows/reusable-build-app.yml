@@ -52,7 +52,7 @@ jobs:
 
   build:
     needs: metadata
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.arch == 'arm' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -71,19 +71,44 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build application
+        run: pnpm run build '${{ inputs.app }}'
+      - name: Preserve payload permissions
+        run: tar -czf payload.tar.gz -C dist .
+      - name: Upload native build
+        uses: actions/upload-artifact@v4
+        with:
+          name: payload-${{ inputs.app }}-${{ matrix.arch }}
+          path: payload.tar.gz
+          retention-days: 1
+
+  pack:
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: ${{ fromJSON(needs.metadata.outputs.architectures) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload-${{ inputs.app }}-${{ matrix.arch }}
+          path: .
+      - name: Extract payload
+        run: mkdir -p dist && tar -xzf payload.tar.gz -C dist
       - name: Install verified fnpack
         run: bash scripts/install-fnpack.sh "${RUNNER_TEMP}/fnpack"
         env:
           FNPACK_VERSION: 1.2.3
           FNPACK_SHA256: 54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93
-      - name: Build application
-        run: pnpm run build '${{ inputs.app }}'
       - name: Pack FPK
         run: node scripts/pack.mjs '${{ inputs.app }}' --arch '${{ matrix.arch }}' --version '${{ inputs.version }}' --output dist/release
         env:
           FNPACK_BIN: ${{ runner.temp }}/fnpack
-      - name: Upload FPK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: fpk-${{ inputs.app }}-${{ matrix.arch }}
           path: dist/release/*.fpk
@@ -91,7 +116,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: [metadata, build]
+    needs: [metadata, pack]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout

@@ -42,7 +42,7 @@ pnpm run pack dsh --arch arm
 
 FPK 会输出到 `dist/release/<FILE_PREFIX>_v<VERSION>_<ARCH>.fpk`。打包器不会修改 `apps/<slug>/native/manifest`，而是在临时目录中写入目标版本和 `platform`，所以连续构建两个架构不会产生串包。GitHub Release 标题使用 `<RELEASE_TITLE> v<VERSION>`；`RELEASE_TITLE` 应包含应用的完整展示名称，不会自动附加平台名称。
 
-本机已有 `fnpack` 时直接调用它；也可以设置 `FNPACK_BIN` 指向固定版本。GitHub Actions 使用 `scripts/install-fnpack.sh` 下载并校验官方 Linux x86 构建器，然后把同一份应用源码分别打包为 x86 和 arm FPK。
+本机已有 `fnpack` 时直接调用它；也可以设置 `FNPACK_BIN` 指向固定版本。GitHub Actions 使用 `scripts/install-fnpack.sh` 下载并校验官方 Linux x86 构建器，应用源码分别在 x64、arm64 runner 上构建，再将保留权限的构建产物交给 x64 runner 打包。声明了 `package.json` 中 `fnos.nativeModules` 的应用，还会在打包时校验目标模块的 Linux ELF 架构。
 
 ## 发布流程
 

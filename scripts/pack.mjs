@@ -44,6 +44,17 @@ for (const arch of architectures) {
   const staging = path.join(stagingRoot, app.appId);
   try {
     await cp(app.distDir, staging, { recursive: true, dereference: true });
+    // Native modules must be Linux ELF files for the selected architecture.
+    // A manifest label alone cannot turn a host build into a target build.
+    for (const template of app.packageJson.fnos?.nativeModules || []) {
+      const relative = template.replaceAll('{arch}', arch === 'x86' ? 'x64' : 'arm64');
+      const binary = await readFile(path.join(staging, relative)).catch(() => {
+        throw new Error(`缺少 ${arch} 原生模块 ${relative}，请先在目标 Linux 架构构建`);
+      });
+      if (binary.length < 20 || binary.toString('hex', 0, 4) !== '7f454c46' || binary[4] !== 2 || binary[5] !== 1 || binary.readUInt16LE(18) !== (arch === 'x86' ? 62 : 183)) {
+        throw new Error(`原生模块架构不匹配：${relative}`);
+      }
+    }
     const manifestPath = path.join(staging, 'manifest');
     await writeFile(manifestPath, patchManifest(await readFile(manifestPath, 'utf8'), version, arch));
     const fnpack = process.env.FNPACK_BIN || 'fnpack';
