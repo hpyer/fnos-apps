@@ -2,27 +2,25 @@
 
 ## 进程与入口
 
-飞牛 `cmd/main` 以应用专用用户运行 `main.mjs`。管理器监听统一网关的 `${TRIM_APPDEST}/app.sock`，公开前缀 `/app/dsh-for-fnos`。桌面主入口先加载轻量启动页；DSH 已就绪时，启动页在**同一飞牛应用窗口**内替换为 DSH 的独立端口页面。首次没有本地版本时，启动页自动转到设置页。版本、端口和市场管理页通过状态岛中的设置按钮进入。
+飞牛 `cmd/main` 以应用专用用户运行 `main.mjs`。管理器监听统一网关的 `${TRIM_APPDEST}/app.sock`，公开前缀 `/app/dsh-for-fnos`。桌面主入口先加载轻量启动页；DSH 已就绪时，启动页在**同一飞牛应用窗口**内替换为 同源 `/app/dsh-for-fnos/dsh/` 页面。首次没有本地版本时，启动页自动转到设置页。版本和市场管理页通过状态岛中的设置按钮进入。
 
 所有启动页、设置页资源和接口均要求网关提供 `X-Trim-Userid`，且 `X-Trim-Isadmin=true`；不能依赖桌面图标可见性作为鉴权。
 
 管理接口的修改操作仅接收 JSON POST，并要求自定义请求头。飞牛网关已先验证管理员身份；浏览器跨站脚本无法在未获 CORS 授权时附带该自定义头。这里不以 Origin 与 Host 相等作为边界，因为飞牛统一网关可能保留浏览器 Origin 但将 Host 改为 Unix Socket 上游地址。耗时操作在服务内执行，立即返回 202，浏览器读取 `/api/status`；关闭页面不会打断安装。同一时间仅允许一个下载、切换、重启或设置操作。
 
-打开 DSH 时默认从网关请求的 Host 推导浏览器地址。部分 fnOS 版本/部署会将这个 Host 改成内部地址，因此配置支持可选 `publicHost`，只接收不带协议、端口与路径的 IP 或域名；设置后使用 `http://publicHost:<port>` 在当前飞牛应用窗口中加载 DSH。
-
-DSH 本身监听 `127.0.0.1` 的临时端口，外部访问端口由代理占用。这样修改外部端口可以先验证新端口可绑定，再持久化设置并关闭旧端口，端口冲突不会破坏运行中的配置。
+启动 API 返回相对路径，不从内部 Host 推导外部地址。所有浏览器请求复用飞牛的协议、域名和端口。原生和开发入口都不再监听独立 DSH TCP 端口；DSH 自身仍仅监听 `127.0.0.1` 的临时端口。旧 `port` / `publicHost` 设置保留用于回退，源码的 `standalone` 选项仅供旧行为回归测试使用。
 
 DSH 的进程由独立 worker 监管。管理器和 worker 使用 IPC 保持父子归属；父进程消失时 worker 终止 DSH 进程组。重启操作停止旧进程后再启动新进程，应用停用也会终止所拥有的子进程。
 
 ## 插件兼容
 
-DSH 前端和所有插件在外部端口的 `/` 根路径运行，不引入飞牛路径前缀，不维护第三方插件路径白名单。HTTP 请求路径、查询参数、响应内容和流式数据原样转发；WebSocket Upgrade 双向转发。唯一例外是 DSH 官方根 HTML：代理在 `<head>` 最前注入一个同源启动脚本，设置 DSH 预留的 `__DSH_TRANSPORT__.ownsHost=true`。这样网页运行在 NAS 地址时仍可使用 DSH 的持久模型和设置 API；不改写任何插件 HTML、资源或接口。
+网关剥离 `/app/dsh-for-fnos/dsh` 后转发请求，不维护插件路径白名单。二进制、JSON、JavaScript 和 SSE 正文透传；HTML 资源属性及 CSS URL 适配子路径，并在 HTML 中优先加载外部 URL 适配脚本。该脚本处理 Fetch、XHR、EventSource、WebSocket、Worker、动态资源元素和 History URL；上游 DSH 0.1.5-rc.1 的插件加载器通过 `script.src` 加载 boot graph 中的插件脚本。
 
-DSH 的 `settings/describe` 响应还会在飞牛 Web 宿主中将 `hasDocument` 设为 `false`。该字段只控制“打开配置文件”这一桌面端本地编辑器按钮；NAS 无法把服务器上的 YAML 交给浏览器本机编辑器。模型、通用设置和插件设置仍通过 DSH 页面直接保存。
+官方首页继续注入 `__DSH_TRANSPORT__.ownsHost=true` 宿主桥接与状态岛。重启和设置跳转均保留同源路径。第三方插件的原生动态 `import()`、Service Worker、内联 HTML/CSS 资源和独立 Cookie 登录不保证透明兼容；需要按实际插件测试。
 
-代理先校验自己的会话和请求来源，再将 Host / Origin 映射为 DSH 回环地址，保留 DSH 自身的令牌和 Cookie 认证。飞牛身份头不会传给插件。上游请求带实际来源的 `X-Forwarded-For`，避免把远程请求伪装成可以任意重启的直接回环客户端。
+每个 HTTP 请求都必须通过飞牛管理员鉴权；修改请求还要求浏览器适配脚本附带 `X-Fnos-Request: 1`，不开放跨域预检。WebSocket 同样校验管理员身份，并要求 Origin 与该管理员此前受自定义请求头保护的请求来源匹配，以兼容飞牛改写内部 Host。来源记录仅存内存，每位用户最多保留 8 个来源。
 
-在浏览器访问独立端口前，启动页或设置页从管理服务领取一次性凭据；凭据放在 fragment 中，不进入 HTTP 请求路径或 Referer。独立端口启动页用该凭据换取 HttpOnly Cookie，随后进入 DSH 自己的令牌交换流程。凭据为 256 位随机值、60 秒过期、仅能使用一次并绑定访问地址；不依赖 Origin/Fetch-Metadata，因为 fnOS 嵌入式环境可能改写这些头。请求门禁覆盖全部路径，包括任意第三方插件 API 和静态资源。
+代理不向 DSH 传递飞牛 Cookie、Authorization、Referer 和身份头；它使用进程健康检查已取得的 DSH 内部 Cookie，按回环地址设置 Host/Origin。上游 Set-Cookie 不下发至飞牛域名，避免污染系统会话。HTTP 重定向保持子路径，SSE 关闭代理缓冲。原生模式不再向浏览器发放跨端口凭据。
 
 官方市场安装命令为 `dsh plugin --profile web add dshmarket`。应用在自己的 DSH_HOME 内执行此命令，保留官方 profile 结构与 pnpm 插件管理。不会向 DSH 源文件注入补丁、删除用户插件、重写用户 `cordis.patch.yml`，也不会假设插件只访问 `/api`。
 

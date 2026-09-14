@@ -7,6 +7,7 @@ import { Sessions, createDshGateway, json, body, sameOrigin } from './gateway.mj
 import { validateConfig, writeJson } from '../shared/config.mjs';
 
 export const PREFIX = '/app/dsh-for-fnos';
+export const DSH_PREFIX = `${PREFIX}/dsh`;
 
 // The manager gateway may see an internal Host from fnOS. A configured public
 // host wins so the browser is always sent to a reachable DSH port.
@@ -39,11 +40,12 @@ export function listen(server, target) {
   });
 }
 async function close(server) {
+  if (!server) return;
   server.closeConnections?.();
   server.closeAllConnections?.();
   await new Promise(resolve => server.close(resolve));
 }
-export async function serve({ root, environment, socket, dev = false, adminPort = 3081, manager = new Manager(root, environment) }) {
+export async function serve({ root, environment, socket, dev = false, adminPort = 3081, manager = new Manager(root, environment), standalone = false }) {
   await manager.init();
   const modulePath = fileURLToPath(import.meta.url);
   const moduleDirectory = path.dirname(modulePath);
@@ -54,9 +56,9 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
   const assetFiles = sourceMode && !dev
     ? new Map([
       ['admin.html', '../web/admin/index.html'], ['admin.css', '../web/admin/index.css'], ['admin.js', '../web/admin/index.js'],
-      ['icons.mjs', '../shared/icons.mjs'], ['launcher.html', '../web/launcher/index.html'], ['launcher.css', '../web/launcher/index.css'], ['launcher.js', '../web/launcher/index.js'],
+      ['subpath.js', '../web/host/subpath.js'], ['icons.mjs', '../shared/icons.mjs'], ['launcher.html', '../web/launcher/index.html'], ['launcher.css', '../web/launcher/index.css'], ['launcher.js', '../web/launcher/index.js'],
     ])
-    : new Map(['admin.html', 'admin.css', 'admin.js', 'icons.mjs', 'launcher.html', 'launcher.css', 'launcher.js'].map(name => [name, name]));
+    : new Map(['subpath.js', 'admin.html', 'admin.css', 'admin.js', 'icons.mjs', 'launcher.html', 'launcher.css', 'launcher.js'].map(name => [name, name]));
   const files = new Map(await Promise.all([...assetFiles].map(async ([name, file]) => [name, await readFile(path.join(assetRoot, file))])));
   try { files.set('launcher-bridge.js', await readFile(path.join(assetRoot, 'launcher-bridge.js'))); }
   catch (error) {
@@ -70,22 +72,44 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
     // builds always provide it; fail hard there so a release cannot omit it.
     if (dev || !sourceMode) throw error;
   }
-  // The public DSH gateway and fnOS manager endpoint are separate listeners.
-  // Their session state must change together when the public port changes.
+  // Native and development entry points use the same-origin path gateway.
+  // Keep the old listener opt-in for compatibility tests, never bind it by default.
   let sessions = new Sessions();
-  let gateway = createDshGateway(manager, sessions, manager.config.port, hostBridge);
+  let gateway = standalone ? createDshGateway(manager, sessions, manager.config.port, hostBridge) : null;
   const bind = port => ({ port, host: dev ? '127.0.0.1' : '0.0.0.0' });
-  await listen(gateway, bind(manager.config.port));
+  if (gateway) await listen(gateway, bind(manager.config.port));
   const contentTypes = {
     'admin.html': 'text/html; charset=utf-8', 'launcher.html': 'text/html; charset=utf-8',
     'admin.css': 'text/css', 'launcher.css': 'text/css',
     'admin.js': 'text/javascript', 'icons.mjs': 'text/javascript', 'launcher.js': 'text/javascript', 'launcher-bridge.js': 'text/javascript',
   };
+  const isAdmin = request => (dev ? request.headers.host === `127.0.0.1:${adminPort}` : !!request.headers['x-trim-userid'] && request.headers['x-trim-isadmin'] === 'true') && request.headers['sec-fetch-site'] !== 'cross-site';
+  // Origins are learned only from CSRF-protected launch requests. fnOS may
+  // replace Host with its socket authority; use the browser Origin for WS.
+  const browserOrigins = new Map();
+  const identity = request => dev ? 'dev' : request.headers['x-trim-userid'];
+  function rememberOrigin(request) {
+    if (!request.headers.origin || request.headers.origin === 'null') return;
+    const origins = browserOrigins.get(identity(request)) || new Set();
+    if (origins.size >= 8) origins.delete(origins.values().next().value);
+    origins.add(request.headers.origin);
+    browserOrigins.set(identity(request), origins);
+  }
+  const pathGateway = createDshGateway(manager, null, 0, hostBridge, {
+    base: DSH_PREFIX, settingsUrl: `${PREFIX}/settings/`, subpathScript: files.get('subpath.js').toString(),
+    authorize: isAdmin,
+    authorizeUpgrade: request => isAdmin(request) && !!request.headers.origin && browserOrigins.get(identity(request))?.has(request.headers.origin),
+  });
   const admin = http.createServer(async (request, response) => {
     try {
-      const authorized = dev ? request.headers.host === `127.0.0.1:${adminPort}` : !!request.headers['x-trim-userid'] && request.headers['x-trim-isadmin'] === 'true';
+      const authorized = isAdmin(request);
       if (!authorized) return json(response, 403, { error: '仅限飞牛管理员访问' });
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (pathname === DSH_PREFIX) { response.writeHead(302, { location: `${DSH_PREFIX}/` }); return response.end(); }
+      if (pathname.startsWith(`${DSH_PREFIX}/`)) {
+        if (request.headers['x-fnos-request'] === '1') rememberOrigin(request);
+        return pathGateway.emit('request', request, response);
+      }
       if (request.method === 'GET' && pathname === PREFIX) { response.writeHead(302, { location: `${PREFIX}/` }); return response.end(); }
       if (request.method === 'GET' && pathname === `${PREFIX}/settings`) { response.writeHead(302, { location: `${PREFIX}/settings/` }); return response.end(); }
       const name = pathname === `${PREFIX}/` ? 'launcher.html'
@@ -107,16 +131,20 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
       const input = await body(request);
       if (action === 'launch') {
         if (!manager.process.address) throw new Error('DSH 尚未就绪');
-        const authority = publicAddress(request.headers.host, manager.config.publicHost, manager.config.port);
-        const ticket = sessions.ticket(authority.host, { settingsUrl: managerSettingsAddress(request) });
-        return json(response, 200, { url: `${authority.origin}/_fnos/bootstrap#${ticket}`, settingsDocument: manager.settingsDocument });
+        if (standalone) {
+          const authority = publicAddress(request.headers.host, manager.config.publicHost, manager.config.port);
+          const ticket = sessions.ticket(authority.host, { settingsUrl: managerSettingsAddress(request) });
+          return json(response, 200, { url: `${authority.origin}/_fnos/bootstrap#${ticket}`, settingsDocument: manager.settingsDocument });
+        }
+        rememberOrigin(request);
+        return json(response, 200, { url: `${DSH_PREFIX}/`, settingsDocument: manager.settingsDocument });
       }
       if (action === 'settings') {
         await manager.exclusive('保存设置', async () => {
           const next = validateConfig(input);
           let replacement;
           let nextSessions;
-          if (next.port !== manager.config.port) {
+          if (standalone && next.port !== manager.config.port) {
             // Bind before persisting or retiring the old gateway. A collision
             // then leaves the active instance and its saved configuration intact.
             nextSessions = new Sessions();
@@ -137,9 +165,11 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
       return json(response, 202, { ok: true });
     } catch (error) { json(response, 400, { error: error.message }); }
   });
+  admin.on('upgrade', (request, socket, head) => pathGateway.emit('upgrade', request, socket, head));
+  admin.on('connection', socket => pathGateway.trackConnection(socket));
   try {
     if (dev) await listen(admin, { host: '127.0.0.1', port: adminPort });
     else { await rm(socket, { force: true }); await listen(admin, socket); await chmod(socket, 0o660); }
   } catch (error) { await close(gateway); throw error; }
-  return { manager, admin, get gateway() { return gateway; }, async stop() { await manager.stop(); await Promise.all([close(admin), close(gateway)]); if (!dev) await rm(socket, { force: true }); } };
+  return { manager, admin, get gateway() { return gateway; }, async stop() { pathGateway.closeConnections(); await manager.stop(); await Promise.all([close(admin), close(gateway)]); if (!dev) await rm(socket, { force: true }); } };
 }

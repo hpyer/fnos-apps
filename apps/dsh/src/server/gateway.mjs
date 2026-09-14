@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { prefixPath, rewriteHtml, rewriteCss, rewriteResponseHeaders } from './subpath.mjs';
 import { ICONS } from '../shared/icons.mjs';
 
 export function json(response, code, data) {
@@ -107,18 +108,45 @@ function forwardTransformed(response, upstream, transform) {
 // This server owns the configurable public DSH port. Its internal /_fnos/
 // namespace handles the authenticated handoff and status island; every other
 // route is forwarded to DSH without a plugin-path allowlist.
-export function createDshGateway(manager, sessions, port, hostBridge = '') {
+export function createDshGateway(manager, sessions, port, hostBridge = '', options = {}) {
+  const base = options.base || '';
+  const local = value => base ? prefixPath(value, base) : value;
+  const authenticated = request => options.authorize ? options.authorize(request) : sessions.authorized(request, port);
+  function prepare(request) {
+    if (!base) return true;
+    if (!request.url.startsWith(`${base}/`)) return false;
+    request.url = request.url.slice(base.length);
+    return true;
+  }
+  function headersFor(request, address, websocket = false) {
+    const headers = upstreamHeaders(request, address, port, websocket);
+    if (base) {
+      delete headers.cookie;
+      delete headers.authorization;
+      delete headers.referer;
+      delete headers['x-fnos-request'];
+      if (manager.process.authCookie) headers.cookie = manager.process.authCookie;
+      headers['accept-encoding'] = 'identity';
+      delete headers['if-none-match'];
+      delete headers['if-modified-since'];
+    }
+    return headers;
+  }
   const server = http.createServer(async (request, response) => {
     try {
+      if (!prepare(request)) return json(response, 404, { error: '未找到接口' });
+      if (base && (!authenticated(request) || (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers['x-fnos-request'] !== '1'))) return json(response, 403, { error: '请求校验失败' });
       const internalPath = new URL(request.url, 'http://dsh.invalid').pathname;
-      if (request.method === 'GET' && ['/_fnos/bootstrap', '/_fnos/bootstrap.js', '/_fnos/owns-host.js', '/_fnos/shell.js', '/_fnos/shell.css'].includes(internalPath)) {
+      if (request.method === 'GET' && ['/_fnos/subpath.js', '/_fnos/bootstrap', '/_fnos/bootstrap.js', '/_fnos/owns-host.js', '/_fnos/shell.js', '/_fnos/shell.css'].includes(internalPath)) {
         // The NAS gateway and public DSH port differ in origin because their
         // ports differ. This bootstrap page must therefore remain frameable
         // by fnOS; 'self' and 'none' both make the browser reject it first.
         response.writeHead(200, { 'content-type': internalPath.endsWith('.css') ? 'text/css; charset=utf-8' : internalPath.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'" });
-        return response.end(internalPath === '/_fnos/owns-host.js' ? ownsHostJS(manager.settingsDocument, hostBridge) : internalPath === '/_fnos/shell.js' ? shellJS : internalPath === '/_fnos/shell.css' ? shellCSS : internalPath.endsWith('.js') ? bootstrapJS : bootstrap);
+        let content = internalPath === '/_fnos/subpath.js' ? options.subpathScript || '' : internalPath === '/_fnos/owns-host.js' ? ownsHostJS(manager.settingsDocument, hostBridge) : internalPath === '/_fnos/shell.js' ? shellJS : internalPath === '/_fnos/shell.css' ? shellCSS : internalPath.endsWith('.js') ? bootstrapJS : bootstrap;
+        if (base && internalPath === '/_fnos/shell.js') content = content.replaceAll("'/_fnos/", `'${base}/_fnos/`);
+        return response.end(content);
       }
-      if (request.method === 'POST' && request.url === '/_fnos/session') {
+      if (!base && request.method === 'POST' && request.url === '/_fnos/session') {
         const address = manager.process.address;
         if (!address) return json(response, 503, { error: 'DSH 尚未就绪' });
         const { ticket } = await body(request);
@@ -129,7 +157,7 @@ export function createDshGateway(manager, sessions, port, hostBridge = '') {
         response.setHeader('set-cookie', `fnos_dsh_${port}=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
         return json(response, 200, { path: address.pathname + address.search + address.hash });
       }
-      const session = sessions.session(request, port);
+      const session = base ? { navigation: { settingsUrl: options.settingsUrl } } : sessions.session(request, port);
       if (!session) return json(response, 401, { error: '请从飞牛 DSH 管理页打开应用' });
       if (request.method === 'GET' && request.url === '/_fnos/status') {
         const state = await manager.status();
@@ -147,6 +175,10 @@ export function createDshGateway(manager, sessions, port, hostBridge = '') {
         const deadline = Date.now() + 120_000;
         while ((manager.busy || !manager.process.address) && Date.now() < deadline) await delay(250);
         if (!manager.process.address) return json(response, 503, { error: manager.error || 'DSH 启动超时，请从设置页重试' });
+        if (base) {
+          response.writeHead(303, { location: `${base}/`, 'cache-control': 'no-store' });
+          return response.end();
+        }
         const ticket = sessions.ticket(request.headers.host, session.navigation);
         response.writeHead(303, { location: `/_fnos/bootstrap#${ticket}`, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
         return response.end();
@@ -160,7 +192,7 @@ export function createDshGateway(manager, sessions, port, hostBridge = '') {
       const address = manager.process.address;
       if (!address) return json(response, 503, { error: 'DSH 正在重启或尚未启动' });
       // Preserve every path and byte, including plugin APIs, binary assets and SSE.
-      const headers = upstreamHeaders(request, address, port);
+      const headers = headersFor(request, address);
       const pathname = new URL(request.url, 'http://dsh.invalid').pathname;
       // Only the DSH root document is adapted; plugin responses stay byte-for-byte intact.
       if (request.method === 'GET' && pathname === '/') headers['accept-encoding'] = 'identity';
@@ -169,11 +201,28 @@ export function createDshGateway(manager, sessions, port, hostBridge = '') {
       const proxy = http.request({ hostname: '127.0.0.1', port: address.port, path: request.url, method: request.method, headers }, upstream => {
         if (upstream.statusCode === 401 && request.method === 'GET' && request.url === '/' && (address.search || address.hash)) {
           upstream.resume();
-          response.writeHead(303, { location: address.pathname + address.search + address.hash, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
+          if (base) return json(response, 503, { error: 'DSH 内部会话尚未就绪，请稍后重试或重启 DSH' });
+          response.writeHead(303, { location: local(address.pathname) + address.search + address.hash, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
           response.end();
           return;
         }
-        if (canInjectIndex(request, upstream)) return forwardTransformed(response, upstream, injectOwnHostIndex);
+        if (base) {
+          upstream.headers = rewriteResponseHeaders(upstream.headers, base, address);
+          const type = String(upstream.headers['content-type'] || '');
+          if (upstream.statusCode === 200 && !upstream.headers['content-encoding'] && /^(text\/html|text\/css)(?:;|$)/i.test(type)) {
+            delete upstream.headers.etag;
+            delete upstream.headers['content-md5'];
+            return forwardTransformed(response, upstream, source => {
+              let text = source.toString('utf8');
+              if (/^text\/css/i.test(type)) return Buffer.from(rewriteCss(text, base));
+              if (pathname === '/') text = injectOwnHostIndex(source).toString('utf8');
+              text = rewriteHtml(text, base);
+              text = text.replace(/<head(?:\s[^>]*)?>/i, tag => `${tag}<script src="${base}/_fnos/subpath.js"></script>`);
+              return Buffer.from(text);
+            });
+          }
+        }
+        if (!base && canInjectIndex(request, upstream)) return forwardTransformed(response, upstream, injectOwnHostIndex);
         response.writeHead(upstream.statusCode, upstream.headers);
         upstream.pipe(response);
         upstream.on('error', () => response.destroy());
@@ -185,17 +234,20 @@ export function createDshGateway(manager, sessions, port, hostBridge = '') {
     } catch (error) { if (!response.headersSent) json(response, 400, { error: error.message }); else response.destroy(); }
   });
   const sockets = new Set();
-  server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  server.trackConnection = socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); };
+  server.on('connection', server.trackConnection);
   server.closeConnections = () => { for (const socket of sockets) socket.destroy(); };
   server.on('upgrade', (request, socket, head) => {
+    const prepared = prepare(request);
     const address = manager.process.address;
-    if (!sessions.authorized(request, port) || !address || request.headers.upgrade?.toLowerCase() !== 'websocket') {
+    if (!prepared || !(options.authorizeUpgrade ? options.authorizeUpgrade(request) : authenticated(request)) || !address || request.headers.upgrade?.toLowerCase() !== 'websocket') {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return;
     }
     // WebSocket does not use request.pipe(), so tunnel both raw sockets after
     // the loopback upstream confirms its Upgrade response.
-    const proxy = http.request({ hostname: '127.0.0.1', port: address.port, path: request.url, headers: upstreamHeaders(request, address, port, true) });
+    const proxy = http.request({ hostname: '127.0.0.1', port: address.port, path: request.url, headers: headersFor(request, address, true) });
     proxy.on('upgrade', (response, upstream, upstreamHead) => {
+      if (base) response.headers = rewriteResponseHeaders(response.headers, base, address);
       socket.write(`HTTP/1.1 101 Switching Protocols\r\n${Object.entries(response.headers).map(([key, value]) => `${key}: ${value}`).join('\r\n')}\r\n\r\n`);
       if (upstreamHead.length) socket.write(upstreamHead);
       if (head.length) upstream.write(head);

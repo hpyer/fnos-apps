@@ -1,7 +1,7 @@
 appname = dsh-for-fnos
 version = 1.0.1
 display_name = DSH for fnOS
-desc = DeepSeek Harness 原生运行管理器，支持独立版本下载、切换、端口设置与插件市场。仅限管理员使用共享实例。
+desc = DeepSeek Harness 原生运行管理器，支持独立版本下载、切换、同源路径访问与插件市场。仅限管理员使用共享实例。
 platform = x86
 source = thirdparty
 maintainer = hpyer

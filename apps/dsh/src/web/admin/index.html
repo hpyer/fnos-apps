@@ -21,9 +21,7 @@
         <section class="panel settings-panel" aria-labelledby="runtime-title">
           <div class="section-head"><div><p class="eyebrow">连接</p><h2 id="runtime-title">运行设置</h2></div></div>
           <form id="settings-form">
-            <div class="form-grid">
-              <label for="port">访问端口<input id="port" name="port" type="number" min="1024" max="65535" required></label>
-            </div>
+            <p class="hint">通过飞牛地址访问，无需单独开放 DSH 端口。</p>
             <fieldset><legend>检查更新标签</legend><div class="channels"><label class="check"><input type="checkbox" checked disabled>latest <span>默认</span></label><label class="check"><input type="checkbox" name="channel" value="alpha">alpha</label><label class="check"><input type="checkbox" name="channel" value="beta">beta</label><label class="check"><input type="checkbox" name="channel" value="next">next</label></div></fieldset>
             <label for="registry">npm 源<select id="registry" name="registry" required><option value="https://mirrors.cloud.tencent.com/npm">腾讯云</option><option value="https://registry.npmmirror.com">npmmirror</option><option value="https://registry.yarnpkg.com">Yarn</option><option value="https://registry.npmjs.org">官方源</option></select></label>
             <p class="hint">仅影响本应用；重启 DSH 后，运行中的插件才会使用新源。</p><button type="submit" class="primary save-button">保存运行设置</button>

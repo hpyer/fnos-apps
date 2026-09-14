@@ -20,6 +20,7 @@ for (const [sourceFile, outputFile] of [['web/host/host-bridge.mjs', 'host-bridg
 await build({ entryPoints: [path.join(source, 'src/web/admin/index.js')], outfile: path.join(target, 'app/admin.js'), bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
 for (const [sourceFile, outputFile] of [
   ['runtime/worker.mjs', 'worker.mjs'],
+  ['web/host/subpath.js', 'subpath.js'],
   ['web/admin/index.html', 'admin.html'], ['web/admin/index.css', 'admin.css'],
   ['web/launcher/index.html', 'launcher.html'], ['web/launcher/index.css', 'launcher.css'], ['web/launcher/index.js', 'launcher.js'],
   ['shared/icons.mjs', 'icons.mjs'],

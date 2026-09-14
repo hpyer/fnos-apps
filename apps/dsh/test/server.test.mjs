@@ -15,7 +15,7 @@ test('native admin routes require NAS administrator identity and custom-header C
   const port = await freePort();
   await writeJson(path.join(root, 'config.json'), { ...DEFAULTS, port });
   const socket = path.join(root, 'admin.sock');
-  const service = await serve({ root, socket, environment: { DSH_HOME: path.join(root, 'home') } });
+  const service = await serve({ root, socket, standalone: true, environment: { DSH_HOME: path.join(root, 'home') } });
   t.after(async () => { await service.stop(); await rm(root, { recursive: true, force: true }); });
   function request(route, { headers = {}, data } = {}) {
     return new Promise((resolve, reject) => {
