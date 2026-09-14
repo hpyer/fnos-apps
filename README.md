@@ -7,6 +7,7 @@
 | 应用名称 | 版本号 | 应用介绍 | 下载 |
 | --- | --- | --- | --- |
 | [DSH for fnOS](apps/dsh/README.md) | `1.0.2` | 在飞牛 NAS 上管理管理员共用的 DeepSeek Harness 实例，支持多版本下载、切换、重启、插件市场和官方插件 API。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=DSH+for+fnOS&expanded=true) |
+| [Xterm for fnOS](apps/xterm/README.md) | `1.0.0` | 管理员专用本机 Bash 终端，以应用包用户运行，断开后结束会话。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=Xterm+for+fnOS&expanded=true) |
 
 ## 快速开始
 
