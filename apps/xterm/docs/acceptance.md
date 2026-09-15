@@ -2,6 +2,8 @@
 
 ## 本机范围
 
+2026-09-15：`pnpm test` 全仓 43 项通过（DSH 37、Xterm 6）；`pnpm run build xterm` 与 `pnpm run pack xterm --all` 通过。浏览器连接真实 PTY 后用 `vi` 验证国旗 emoji 显示和后续文本列对齐。Xterm for fnOS 版本为 1.0.1；该版本仍需 fnOS 实机升级验证。
+
 2026-09-14：`pnpm test` 全仓 43 项通过（DSH 37、Xterm 6）；`pnpm run build xterm` 与 `pnpm run pack xterm --all` 通过。Xterm for fnOS 版本为 1.0.0。
 
 - macOS / Node 24：真实 node-pty + Bash 验证 TTY、Unicode、窗口尺寸、Ctrl+C 以及断开 IPC 后 Shell 退出。
@@ -20,4 +22,4 @@
 6. 经 HTTPS 反代和飞牛远程访问验证 Origin/Host 改写、WSS 心跳、空闲超时；不以局域网通过代替远程验证。
 7. 从新连接确认 HOME 数据保留；检查日志不含终端输入输出、凭据、环境变量；确认卸载保留/删除数据行为。
 
-已在一台 fnOS 设备上验证基础会话、断开、清屏以及 `cd`、`pwd`、`ls` 等命令；跨架构、长时间运行和异常恢复项目仍待完整实机验收。CI 工作流修改尚未在 GitHub 执行。
+已在一台 fnOS 设备上验证 1.0.0 的基础会话、断开、清屏以及 `cd`、`pwd`、`ls` 等命令；1.0.1 升级、跨架构、长时间运行和异常恢复项目仍待完整实机验收。

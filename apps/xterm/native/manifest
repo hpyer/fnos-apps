@@ -1,5 +1,5 @@
 appname = xterm-for-fnos
-version = 1.0.0
+version = 1.0.1
 display_name = Xterm for fnOS
 desc = 管理员专用本机终端，以应用包用户运行 Bash，断开后结束会话。
 platform = x86
