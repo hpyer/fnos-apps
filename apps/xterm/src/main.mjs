@@ -16,6 +16,7 @@ const environment = {
   PATH: "/var/apps/nodejs_v24/target/bin:/usr/local/bin:/usr/bin:/bin",
   LANG: process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8",
   BASH_SILENCE_DEPRECATION_WARNING: "1",
+  EXINIT: "if exists('+emoji') | set noemoji | endif",
   HOME: home,
   USER: os.userInfo().username,
   LOGNAME: os.userInfo().username,

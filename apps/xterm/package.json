@@ -9,8 +9,9 @@
     "test": "node prepare-native.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@xterm/xterm": "6.0.0",
     "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-unicode-graphemes": "0.4.0",
+    "@xterm/xterm": "6.0.0",
     "node-pty": "1.1.0",
     "ws": "8.21.3"
   },

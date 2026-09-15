@@ -86,7 +86,11 @@ for (const name of ["index.html", "icon.png"])
     path.join(target, "app/web", name),
   );
 await mkdir(path.join(target, "app/licenses"), { recursive: true });
-for (const name of ["@xterm/xterm", "@xterm/addon-fit"])
+for (const name of [
+  "@xterm/xterm",
+  "@xterm/addon-fit",
+  "@xterm/addon-unicode-graphemes",
+])
   await cp(
     path.join(source, "node_modules", name, "LICENSE"),
     path.join(target, "app/licenses", name.split("/")[1] + "-LICENSE"),

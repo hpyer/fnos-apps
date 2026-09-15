@@ -1,9 +1,11 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 const term = new Terminal({
   cursorBlink: true,
   fontSize: 14,
-  fontFamily: 'Menlo, Consolas, "Liberation Mono", monospace',
+  fontFamily:
+    'Menlo, Consolas, "Liberation Mono", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", monospace',
   scrollback: 3000,
   theme: {
     background: "#101112",
@@ -11,11 +13,27 @@ const term = new Terminal({
     cursor: "#65b3df",
     selectionBackground: "#30516a",
   },
-  allowProposedApi: false,
+  allowProposedApi: true,
 });
 const fit = new FitAddon();
+const unicodeGraphemes = new UnicodeGraphemesAddon();
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+});
 term.loadAddon(fit);
+term.loadAddon(unicodeGraphemes);
 term.open(document.querySelector("#terminal"));
+term.registerCharacterJoiner((text) => {
+  const ranges = [];
+  for (const { segment, index } of graphemeSegmenter.segment(text)) {
+    if (
+      [...segment].length > 1 &&
+      /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(segment)
+    )
+      ranges.push([index, index + segment.length]);
+  }
+  return ranges;
+});
 const $ = (id) => document.getElementById(id);
 let socket,
   connecting = false,
