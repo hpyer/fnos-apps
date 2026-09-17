@@ -35,7 +35,7 @@ test('native admin routes require NAS administrator identity and custom-header C
   const launcher = await request('/', { headers: admin });
   assert.equal(launcher.status, 200);
   assert.match(launcher.headers['content-type'], /^text\/html/);
-  assert.match(launcher.data, /正在打开 DSH/);
+  assert.match(launcher.data, /选择 DSH 工作目录/);
   const settings = await request('/settings/', { headers: admin });
   assert.equal(settings.status, 200);
   assert.match(settings.data, /运行设置/);
@@ -78,4 +78,64 @@ test('explicit NAS address overrides an internal gateway host when opening DSH',
 test('settings navigation retains the fnOS gateway origin', () => {
   assert.equal(managerSettingsAddress({ headers: { host: 'nas.local:5666', 'x-forwarded-proto': 'https' } }), 'https://nas.local:5666/app/dsh-for-fnos/settings/');
   assert.equal(managerSettingsAddress({ headers: { host: 'nas.local:5666' } }), 'http://nas.local:5666/app/dsh-for-fnos/settings/');
+});
+
+test('multi-user gateway admits regular users but keeps runtime administration private', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-multi-server-'));
+  const socket = path.join(root, 'app.sock');
+  const actions = [];
+  const tenant = {
+    process: { child: {}, address: new URL('http://127.0.0.1:47000/'), authCookie: 'fixture' },
+    settingsDocument: path.join(root, 'users/1001/home/.dsh/settings.yaml'),
+    busy: null,
+    status: async () => ({ current: '1.0.0', running: true, busy: null, error: null, versions: [{ version: '1.0.0' }], isAdmin: false }),
+    dispatch: async (action, data) => { actions.push({ action, data }); },
+  };
+  const manager = {
+    config: DEFAULTS,
+    init: async () => {}, stop: async () => {},
+    context: async () => tenant,
+    userRoot: uid => `/vol1/${uid}`,
+    setUserHome: async (uid, home) => {
+      actions.push({ uid, home, action: 'home' });
+      return home;
+    },
+    userStatus: async (_uid, isAdmin) => ({ ...await tenant.status(), isAdmin, config: isAdmin ? DEFAULTS : undefined }),
+    dispatchUser: async (uid, isAdmin, action, data) => { actions.push({ uid, isAdmin, action, data }); },
+    dispatchAdmin: async (action, data) => { actions.push({ action, data }); },
+    stopService: async uid => { actions.push({ action: 'stop', uid }); },
+    updateConfig: async () => {},
+  };
+  const service = await serve({ root, socket, manager });
+  t.after(async () => { await service.stop(); await rm(root, { recursive: true, force: true }); });
+  function request(route, { headers = {}, data } = {}) {
+    return new Promise((resolve, reject) => {
+      const req = http.request({ socketPath: socket, path: PREFIX + route, method: data ? 'POST' : 'GET', headers: { host: 'nas.local:5666', ...headers } }, res => {
+        let text = ''; res.on('data', chunk => { text += chunk; }); res.on('end', () => resolve({ status: res.statusCode, data: res.headers['content-type']?.startsWith('application/json') ? JSON.parse(text) : text }));
+      });
+      req.on('error', reject); req.end(data ? JSON.stringify(data) : undefined);
+    });
+  }
+  const user = { 'x-trim-userid': '1001', 'x-trim-isadmin': 'false' };
+  const post = { ...user, 'x-fnos-request': '1', 'content-type': 'application/json' };
+  assert.equal((await request('/', { headers: user })).status, 200);
+  const home = await request('/api/home', { headers: user });
+  assert.deepEqual(home, { status: 200, data: { home: '/vol1/1001' } });
+  assert.deepEqual(await request('/api/home', { headers: post, data: { home: '/vol1/1001/dsh_home' } }), { status: 200, data: { home: '/vol1/1001/dsh_home' } });
+  assert.deepEqual(actions.at(-1), { uid: '1001', home: '/vol1/1001/dsh_home', action: 'home' });
+  const status = await request('/api/status', { headers: user });
+  assert.equal(status.status, 200);
+  assert.equal(status.data.isAdmin, false);
+  assert.equal((await request('/settings/', { headers: user })).status, 403);
+  assert.equal((await request('/api/check', { headers: post, data: {} })).status, 403);
+  assert.equal((await request('/api/remove', { headers: post, data: { version: '1.0.0' } })).status, 403);
+  assert.equal((await request('/api/activate', { headers: post, data: { version: '1.0.0' } })).status, 202);
+  assert.deepEqual(actions.at(-1), { uid: '1001', isAdmin: false, action: 'activate', data: { version: '1.0.0' } });
+  const adminPost = { ...post, 'x-trim-isadmin': 'true' };
+  assert.equal((await request('/api/remove', { headers: adminPost, data: { version: '1.1.0' } })).status, 202);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(actions.at(-1), { action: 'remove', data: { version: '1.1.0' } });
+  assert.equal((await request('/api/stop', { headers: post, data: { uid: '1001' } })).status, 403);
+  assert.equal((await request('/api/stop', { headers: adminPost, data: { uid: '1001' } })).status, 200);
+  assert.deepEqual(actions.at(-1), { action: 'stop', uid: '1001' });
 });

@@ -114,13 +114,22 @@ test('the DSH shell exposes authenticated status, restart, and settings navigati
   const shell = await shellResponse.text();
   assert.match(shell, /重启 DSH/);
   assert.match(shell, /fnos-dsh-veil/);
+  assert.match(shell, /data-role="state-text"/);
+  assert.match(shell, /classList\.toggle\('is-admin'/);
   assert.match(shell, /M512\.085373 1024/);
   assert.match(shell, /location\.assign\('\/_fnos\/reopen'\)/);
   assert.match(shell, /运行中 · /);
   assert.doesNotMatch(shell, /title=/);
   assert.doesNotThrow(() => new Function(shell));
   const shellStyle = await fetch(`${f.url}/_fnos/shell.css?v=1.0.0`);
-  assert.match(await shellStyle.text(), /fnos-dsh-spin/);
+  const shellCss = await shellStyle.text();
+  assert.match(shellCss, /fnos-dsh-spin/);
+  assert.match(shellCss, /@media\(max-width:620px\)/);
+  assert.match(shellCss, /transform:none/);
+  assert.match(shellCss, /backdrop-filter:none/);
+  assert.match(shellCss, /\[data-role=panel\][^{]*\{[^}]*width:288px/);
+  assert.match(shellCss, /grid-template-columns:repeat\(3,1fr\)/);
+  assert.match(shellCss, /bottom:calc\(8px \+ env\(safe-area-inset-bottom,0px\)\)/);
 });
 test('reopen waits for DSH readiness before minting a fresh navigation ticket', async t => {
   const f = await fixture(t);

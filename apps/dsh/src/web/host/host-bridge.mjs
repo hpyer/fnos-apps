@@ -1,7 +1,17 @@
+import { TrimApp } from '@trimjs/web-app';
+
 const transport = globalThis.__DSH_TRANSPORT__ ?? {};
 const upstreamFetch = transport.fetch ?? ((input, init) => globalThis.fetch(input, init));
-const OPEN_REQUEST = 'fnos-dsh/open-settings-document';
-const OPEN_RESULT = 'fnos-dsh/open-settings-result';
+let app;
+
+async function fnosApp() {
+  app ??= new TrimApp();
+  await Promise.race([
+    app.ready(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('飞牛微应用连接超时')), 5_000)),
+  ]);
+  return app;
+}
 
 function isSettingsDocumentRequest(input, init) {
   const url = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input);
@@ -23,24 +33,26 @@ function rpcResponse(rpcId, result) {
   });
 }
 
-function openInFnOS() {
-  return new Promise((resolve, reject) => {
-    const id = crypto.randomUUID();
-    const timeout = setTimeout(() => finish(new Error('飞牛文件管理器未响应，请重新打开 DSH 后再试')), 10_000);
-    function finish(error) {
-      clearTimeout(timeout);
-      globalThis.removeEventListener('message', receive);
-      error ? reject(error) : resolve();
-    }
-    function receive(event) {
-      const result = event.data;
-      if (event.source !== globalThis.parent || result?.type !== OPEN_RESULT || result.id !== id) return;
-      finish(result.ok ? undefined : new Error(result.error || '无法打开配置文件'));
-    }
-    globalThis.addEventListener('message', receive);
-    globalThis.parent.postMessage({ type: OPEN_REQUEST, id }, '*');
-  });
+async function openInFnOS() {
+  const file = globalThis.__FNOS_DSH_SETTINGS_FILE__;
+  if (!file) throw new Error('配置文件不可用');
+  const client = await fnosApp();
+  if (client.isStandaloneWeb) throw new Error('请在飞牛客户端中打开配置文件');
+  await client.openFile(file);
 }
+
+globalThis.__FNOS_DSH_AUTHORIZE_DIRECTORY__ = async () => {
+  const client = await fnosApp();
+  if (client.isStandaloneWeb) throw new Error('请在飞牛应用设置中添加个人授权目录');
+  const result = await client.pickUserFile({
+    directory: true,
+    title: '选择 DSH 可访问目录',
+    okText: '确认授权',
+    sidebarGroup: ['myFiles', 'otherShare', 'external', 'remote', 'favorites', 'team'],
+  });
+  if (result && result.code !== 0) throw new Error(result.msg || '目录授权失败');
+  return result?.data ?? [];
+};
 
 async function openSettingsDocument(input, init) {
   let rpcId;

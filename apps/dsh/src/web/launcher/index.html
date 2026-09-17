@@ -2,11 +2,14 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DSH for fnOS</title><link rel="stylesheet" href="./launcher.css"></head>
 <body>
-<main>
+<main aria-labelledby="title">
   <div class="mark" aria-hidden="true">DSH</div>
-  <h1>正在打开 DSH</h1>
-  <p id="message" role="status">正在检查运行状态…</p>
-  <a id="settings" href="./settings/" hidden>打开 DSH for fnOS 设置</a>
+  <h1 id="title">选择 DSH 工作目录</h1>
+  <p id="message" role="status">DSH 会将配置、会话和工作区保存在你选择的目录中。</p>
+  <div class="actions">
+    <button id="authorize-home" type="button">选择工作目录</button>
+    <a id="open-settings" href="./settings/" hidden>打开设置</a>
+  </div>
 </main>
 <script type="module" src="./launcher.js"></script>
 </body></html>

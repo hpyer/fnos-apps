@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readlink, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Manager } from '../src/runtime/manager.mjs';
@@ -56,6 +56,48 @@ test('market install runs only until it succeeds, then survives restarts', async
   await manager.ensureMarket('1.0.0');
   await manager.ensureMarket('1.0.0');
   assert.equal(attempts, 2);
+});
+test('market installation rebuilds only derived profile dependencies after an EACCES failure', async t => {
+  const { manager } = await fixture(t);
+  manager.state.marketInstalled = false;
+  const profile = path.join(manager.environment.DSH_HOME, 'profiles/web');
+  await mkdir(path.join(profile, 'node_modules/argparse'), { recursive: true });
+  await writeFile(path.join(profile, 'node_modules/argparse/package.json'), '{}');
+  await writeFile(path.join(profile, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+  let attempts = 0;
+  manager.execute = async () => { if (++attempts === 1) throw new Error('pnpm failed: EACCES: permission denied'); };
+  await manager.ensureMarket('1.0.0');
+  assert.equal(attempts, 2);
+  await assert.rejects(readFile(path.join(profile, 'node_modules/argparse/package.json'), 'utf8'), /ENOENT/);
+  await assert.rejects(readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'), /ENOENT/);
+  assert.equal(manager.state.marketInstalled, true);
+});
+test('market installation backs up an unreadable web profile before recreating it', async t => {
+  const { manager } = await fixture(t);
+  manager.state.marketInstalled = false;
+  const profiles = path.join(manager.environment.DSH_HOME, 'profiles');
+  const profile = path.join(profiles, 'web');
+  await mkdir(profile, { recursive: true });
+  await writeFile(path.join(profile, 'package.json'), '{}');
+  let attempts = 0;
+  manager.execute = async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error('pnpm failed: EACCES: permission denied');
+    if (attempts === 2) throw new Error(`dsh: failed to read profile manifest ${path.join(profile, 'package.json')}: Error: EACCES: permission denied`);
+    if (attempts === 3) {
+      await mkdir(path.join(profile, 'node_modules/example'), { recursive: true });
+      await writeFile(path.join(profile, 'package.json'), '{}', { mode: 0o600 });
+      await writeFile(path.join(profile, 'node_modules/example/package.json'), '{}', { mode: 0o600 });
+      throw new Error(`dsh: failed to read profile manifest ${path.join(profile, 'package.json')}: Error: EACCES: permission denied`);
+    }
+  };
+  await manager.ensureMarket('1.0.0');
+  assert.equal(attempts, 4);
+  const entries = await (await import('node:fs/promises')).readdir(profiles);
+  assert.ok(entries.some(name => name.startsWith('web.permission-backup-')));
+  assert.equal((await stat(path.join(profile, 'package.json'))).mode & 0o777, 0o644);
+  assert.equal((await stat(path.join(profile, 'node_modules/example/package.json'))).mode & 0o777, 0o644);
+  assert.equal(manager.state.marketInstalled, true);
 });
 test('a completed web-profile plugin operation is restarted by the supervisor', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-manager-profile-watch-'));

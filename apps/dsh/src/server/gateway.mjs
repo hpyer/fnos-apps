@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { prefixPath, rewriteHtml, rewriteCss, rewriteResponseHeaders } from './subpath.mjs';
 import { ICONS } from '../shared/icons.mjs';
+import { responsiveShellCSS, responsiveShellJS } from './shell.mjs';
 
 export function json(response, code, data) {
   response.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
@@ -112,20 +113,21 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
   const base = options.base || '';
   const local = value => base ? prefixPath(value, base) : value;
   const authenticated = request => options.authorize ? options.authorize(request) : sessions.authorized(request, port);
+  const resolveManager = request => options.managerFor ? options.managerFor(request) : manager;
   function prepare(request) {
     if (!base) return true;
     if (!request.url.startsWith(`${base}/`)) return false;
     request.url = request.url.slice(base.length);
     return true;
   }
-  function headersFor(request, address, websocket = false) {
+  function headersFor(request, address, activeManager, websocket = false) {
     const headers = upstreamHeaders(request, address, port, websocket);
     if (base) {
       delete headers.cookie;
       delete headers.authorization;
       delete headers.referer;
       delete headers['x-fnos-request'];
-      if (manager.process.authCookie) headers.cookie = manager.process.authCookie;
+      if (activeManager.process.authCookie) headers.cookie = activeManager.process.authCookie;
       headers['accept-encoding'] = 'identity';
       delete headers['if-none-match'];
       delete headers['if-modified-since'];
@@ -136,18 +138,19 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
     try {
       if (!prepare(request)) return json(response, 404, { error: '未找到接口' });
       if (base && (!authenticated(request) || (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers['x-fnos-request'] !== '1'))) return json(response, 403, { error: '请求校验失败' });
+      const activeManager = await resolveManager(request);
       const internalPath = new URL(request.url, 'http://dsh.invalid').pathname;
       if (request.method === 'GET' && ['/_fnos/subpath.js', '/_fnos/bootstrap', '/_fnos/bootstrap.js', '/_fnos/owns-host.js', '/_fnos/shell.js', '/_fnos/shell.css'].includes(internalPath)) {
         // The NAS gateway and public DSH port differ in origin because their
         // ports differ. This bootstrap page must therefore remain frameable
         // by fnOS; 'self' and 'none' both make the browser reject it first.
         response.writeHead(200, { 'content-type': internalPath.endsWith('.css') ? 'text/css; charset=utf-8' : internalPath.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'" });
-        let content = internalPath === '/_fnos/subpath.js' ? options.subpathScript || '' : internalPath === '/_fnos/owns-host.js' ? ownsHostJS(manager.settingsDocument, hostBridge) : internalPath === '/_fnos/shell.js' ? shellJS : internalPath === '/_fnos/shell.css' ? shellCSS : internalPath.endsWith('.js') ? bootstrapJS : bootstrap;
+        let content = internalPath === '/_fnos/subpath.js' ? options.subpathScript || '' : internalPath === '/_fnos/owns-host.js' ? ownsHostJS(activeManager.settingsDocument, hostBridge) : internalPath === '/_fnos/shell.js' ? responsiveShellJS : internalPath === '/_fnos/shell.css' ? responsiveShellCSS : internalPath.endsWith('.js') ? bootstrapJS : bootstrap;
         if (base && internalPath === '/_fnos/shell.js') content = content.replaceAll("'/_fnos/", `'${base}/_fnos/`);
         return response.end(content);
       }
       if (!base && request.method === 'POST' && request.url === '/_fnos/session') {
-        const address = manager.process.address;
+        const address = activeManager.process.address;
         if (!address) return json(response, 503, { error: 'DSH 尚未就绪' });
         const { ticket } = await body(request);
         // This is deliberately ticket-authenticated rather than Origin-authenticated.
@@ -160,21 +163,34 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
       const session = base ? { navigation: { settingsUrl: options.settingsUrl } } : sessions.session(request, port);
       if (!session) return json(response, 401, { error: '请从飞牛 DSH 管理页打开应用' });
       if (request.method === 'GET' && request.url === '/_fnos/status') {
-        const state = await manager.status();
-        return json(response, 200, { current: state.current, running: state.running, busy: state.busy, error: state.error });
+        const state = await activeManager.status();
+        const publicState = { current: state.current, running: state.running, busy: state.busy, error: state.error };
+        if (state.versions) publicState.versions = state.versions;
+        if (state.isAdmin !== undefined) publicState.isAdmin = !!state.isAdmin;
+        return json(response, 200, publicState);
       }
       if (request.method === 'POST' && request.url === '/_fnos/restart') {
-        if (manager.busy) return json(response, 409, { error: `正在${manager.busy}` });
-        manager.dispatch('restart').catch(() => {});
+        if (activeManager.busy) return json(response, 409, { error: `正在${activeManager.busy}` });
+        activeManager.dispatch('restart').catch(() => {});
         return json(response, 202, { ok: true });
+      }
+      if (request.method === 'POST' && request.url === '/_fnos/version') {
+        if (activeManager.busy) return json(response, 409, { error: `正在${activeManager.busy}` });
+        const input = await body(request);
+        activeManager.dispatch('activate', { version: input.version }).catch(() => {});
+        return json(response, 202, { ok: true });
+      }
+      if (request.method === 'POST' && request.url === '/_fnos/folders') {
+        const result = await activeManager.dispatch('folders');
+        return json(response, 200, { count: result.paths.length });
       }
       if (request.method === 'GET' && internalPath === '/_fnos/reopen') {
         // A browser navigation can arrive between process replacement and DSH's
         // final readiness probe. Keep this authenticated request pending until
         // the supervisor has completed the restart instead of exposing JSON.
         const deadline = Date.now() + 120_000;
-        while ((manager.busy || !manager.process.address) && Date.now() < deadline) await delay(250);
-        if (!manager.process.address) return json(response, 503, { error: manager.error || 'DSH 启动超时，请从设置页重试' });
+        while ((activeManager.busy || !activeManager.process.address) && Date.now() < deadline) await delay(250);
+        if (!activeManager.process.address) return json(response, 503, { error: activeManager.error || 'DSH 启动超时，请重试' });
         if (base) {
           response.writeHead(303, { location: `${base}/`, 'cache-control': 'no-store' });
           return response.end();
@@ -184,15 +200,18 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
         return response.end();
       }
       if (request.method === 'GET' && request.url === '/_fnos/settings') {
+        const state = await activeManager.status();
+        if (state.isAdmin === false) return json(response, 403, { error: '仅限管理员访问应用设置' });
         const location = session.navigation?.settingsUrl;
         if (!location) return json(response, 503, { error: '设置页地址不可用，请重新打开 DSH for fnOS' });
         response.writeHead(303, { location, 'cache-control': 'no-store' });
         return response.end();
       }
-      const address = manager.process.address;
+      const address = activeManager.process.address;
       if (!address) return json(response, 503, { error: 'DSH 正在重启或尚未启动' });
+      const releaseActivity = activeManager.openActivityConnection?.() ?? (() => {});
       // Preserve every path and byte, including plugin APIs, binary assets and SSE.
-      const headers = headersFor(request, address);
+      const headers = headersFor(request, address, activeManager);
       const pathname = new URL(request.url, 'http://dsh.invalid').pathname;
       // Only the DSH root document is adapted; plugin responses stay byte-for-byte intact.
       if (request.method === 'GET' && pathname === '/') headers['accept-encoding'] = 'identity';
@@ -227,9 +246,9 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
         upstream.pipe(response);
         upstream.on('error', () => response.destroy());
       });
-      proxy.on('error', () => { if (!response.headersSent) json(response, 502, { error: 'DSH 连接暂时不可用' }); else response.destroy(); });
+      proxy.on('error', () => { releaseActivity(); if (!response.headersSent) json(response, 502, { error: 'DSH 连接暂时不可用' }); else response.destroy(); });
       request.on('aborted', () => proxy.destroy());
-      response.on('close', () => proxy.destroy());
+      response.on('close', () => { releaseActivity(); proxy.destroy(); });
       request.pipe(proxy);
     } catch (error) { if (!response.headersSent) json(response, 400, { error: error.message }); else response.destroy(); }
   });
@@ -237,23 +256,30 @@ export function createDshGateway(manager, sessions, port, hostBridge = '', optio
   server.trackConnection = socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); };
   server.on('connection', server.trackConnection);
   server.closeConnections = () => { for (const socket of sockets) socket.destroy(); };
-  server.on('upgrade', (request, socket, head) => {
+  server.on('upgrade', async (request, socket, head) => {
     const prepared = prepare(request);
-    const address = manager.process.address;
-    if (!prepared || !(options.authorizeUpgrade ? options.authorizeUpgrade(request) : authenticated(request)) || !address || request.headers.upgrade?.toLowerCase() !== 'websocket') {
+    if (!prepared || !(options.authorizeUpgrade ? options.authorizeUpgrade(request) : authenticated(request)) || request.headers.upgrade?.toLowerCase() !== 'websocket') {
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return;
+    }
+    let activeManager;
+    try { activeManager = await resolveManager(request); }
+    catch { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+    const address = activeManager.process.address;
+    if (!address) {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return;
     }
     // WebSocket does not use request.pipe(), so tunnel both raw sockets after
     // the loopback upstream confirms its Upgrade response.
-    const proxy = http.request({ hostname: '127.0.0.1', port: address.port, path: request.url, headers: headersFor(request, address, true) });
+    const proxy = http.request({ hostname: '127.0.0.1', port: address.port, path: request.url, headers: headersFor(request, address, activeManager, true) });
     proxy.on('upgrade', (response, upstream, upstreamHead) => {
+      const releaseActivity = activeManager.openActivityConnection?.() ?? (() => {});
       if (base) response.headers = rewriteResponseHeaders(response.headers, base, address);
       socket.write(`HTTP/1.1 101 Switching Protocols\r\n${Object.entries(response.headers).map(([key, value]) => `${key}: ${value}`).join('\r\n')}\r\n\r\n`);
       if (upstreamHead.length) socket.write(upstreamHead);
       if (head.length) upstream.write(head);
       socket.pipe(upstream).pipe(socket);
-      socket.on('close', () => upstream.destroy());
-      upstream.on('close', () => socket.destroy());
+      socket.on('close', () => { releaseActivity(); upstream.destroy(); });
+      upstream.on('close', () => { releaseActivity(); socket.destroy(); });
       socket.on('error', () => upstream.destroy());
       upstream.on('error', () => socket.destroy());
     });

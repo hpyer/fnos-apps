@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export const DEFAULTS = Object.freeze({ port: 3080, channels: ['latest'], registry: 'https://mirrors.cloud.tencent.com/npm', publicHost: '' });
+export const DEFAULTS = Object.freeze({ port: 3080, channels: ['latest'], registry: 'https://mirrors.cloud.tencent.com/npm', publicHost: '', idleTimeoutSeconds: 600 });
 
 function loopbackHost(host) { return host === 'localhost' || host.startsWith('127.') || host === '[::1]'; }
 
@@ -27,11 +27,14 @@ export function validateConfig(input) {
   if (!Array.isArray(input.channels) || input.channels.some(x => !['latest', 'alpha', 'beta', 'next'].includes(x))) throw new Error('无效的更新标签');
   const registry = new URL(input.registry);
   if (registry.protocol !== 'https:' || registry.username || registry.password || registry.search || registry.hash) throw new Error('registry 必须是不含凭据和查询参数的 HTTPS 地址');
+  const idleTimeoutSeconds = input.idleTimeoutSeconds ?? DEFAULTS.idleTimeoutSeconds;
+  if (!Number.isInteger(Number(idleTimeoutSeconds)) || Number(idleTimeoutSeconds) < 60 || Number(idleTimeoutSeconds) > 86400) throw new Error('空闲自动关闭时间必须是 60–86400 秒的整数');
   return {
     port,
     channels: [...new Set(['latest', ...input.channels])],
     registry: registry.href.replace(/\/$/, ''),
     publicHost: validatePublicHost(input.publicHost),
+    idleTimeoutSeconds: Number(idleTimeoutSeconds),
   };
 }
 export async function readJson(file, fallback) {

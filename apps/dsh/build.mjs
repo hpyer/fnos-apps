@@ -17,12 +17,16 @@ for (const name of ['main', 'setup']) {
 for (const [sourceFile, outputFile] of [['web/host/host-bridge.mjs', 'host-bridge.js'], ['web/launcher/launcher-bridge.mjs', 'launcher-bridge.js']]) {
   await build({ entryPoints: [path.join(source, `src/${sourceFile}`)], outfile: path.join(target, `app/${outputFile}`), bundle: true, platform: 'browser', target: 'es2022', format: 'iife' });
 }
-await build({ entryPoints: [path.join(source, 'src/web/admin/index.js')], outfile: path.join(target, 'app/admin.js'), bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
+for (const [sourceFile, outputFile] of [['web/admin/index.js', 'admin.js'], ['web/launcher/index.js', 'launcher.js']]) {
+  // Both browser entry points use the fnOS Web SDK. Bundle them so the native
+  // WebView never has to resolve workspace-only bare package specifiers.
+  await build({ entryPoints: [path.join(source, 'src', sourceFile)], outfile: path.join(target, 'app', outputFile), bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
+}
 for (const [sourceFile, outputFile] of [
   ['runtime/worker.mjs', 'worker.mjs'],
   ['web/host/subpath.js', 'subpath.js'],
   ['web/admin/index.html', 'admin.html'], ['web/admin/index.css', 'admin.css'],
-  ['web/launcher/index.html', 'launcher.html'], ['web/launcher/index.css', 'launcher.css'], ['web/launcher/index.js', 'launcher.js'],
+  ['web/launcher/index.html', 'launcher.html'], ['web/launcher/index.css', 'launcher.css'],
   ['shared/icons.mjs', 'icons.mjs'],
 ]) {
   await cp(path.join(source, 'src', sourceFile), path.join(target, 'app', outputFile));

@@ -13,12 +13,6 @@ export function exactVersion(version) {
   if (typeof version !== 'string' || semver.valid(version) !== version) throw new Error('必须使用完整的 DSH 精确版本号');
   return version;
 }
-export function prunePlan(versions, protectedVersions, limit = 5) {
-  const sorted = [...versions].sort((a, b) => semver.rcompare(a.version, b.version));
-  const keep = new Set(protectedVersions.filter(Boolean));
-  for (const item of sorted) if (keep.size < limit) keep.add(item.version);
-  return sorted.filter(x => !keep.has(x.version));
-}
 export class Versions {
   constructor(root, environment, { execute = run, fetcher = fetch, signal } = {}) {
     this.root = root;
@@ -55,9 +49,14 @@ export class Versions {
       catch (error) { return { channel, error: error.message }; }
     }));
   }
-  async install(config, version, protectedVersions = []) {
+  async install(config, version, onProgress = () => {}) {
+    const report = progress => { try { onProgress(progress); } catch { /* UI progress must never fail an install */ } };
     exactVersion(version);
-    if ((await this.list()).some(x => x.version === version)) return;
+    report({ step: 1, total: 4, stage: '解析版本信息' });
+    if ((await this.list()).some(x => x.version === version)) {
+      report({ step: 4, total: 4, stage: '版本已下载' });
+      return;
+    }
     const release = await this.metadata(config, version);
     if (release.version !== version) throw new Error('精确版本解析不一致');
     // Install into a private staging directory. Nothing in versions/ is
@@ -66,17 +65,23 @@ export class Versions {
     await mkdir(staging, { recursive: true, mode: 0o700 });
     try {
       await writeJson(path.join(staging, 'package.json'), { name: 'managed-dsh-runtime', private: true, dependencies: { [PACKAGE]: version } });
+      report({ step: 2, total: 4, stage: '下载并安装运行时' });
       await this.execute('npm', ['install', '--prefix', staging, '--omit=dev', '--no-audit', '--no-fund', '--registry', config.registry], {
         cwd: staging, env: { ...this.environment, npm_config_registry: config.registry }, timeout: 900_000, signal: this.signal,
       });
+      report({ step: 3, total: 4, stage: '校验运行时完整性' });
       const installed = await readJson(path.join(staging, 'node_modules', PACKAGE, 'package.json'));
       const lock = await readJson(path.join(staging, 'package-lock.json'));
       if (installed.name !== PACKAGE || installed.version !== version || lock.packages?.[`node_modules/${PACKAGE}`]?.integrity !== release.integrity) throw new Error('安装后的包名、版本或 integrity 校验失败');
       await readFile(path.join(staging, 'node_modules', PACKAGE, 'lib/bin.js'));
       await writeJson(path.join(staging, 'installed.json'), { ...release, installedAt: new Date().toISOString() });
-      // Only verified downloads can evict an old runtime; the active runtime is protected.
-      for (const victim of prunePlan([...await this.list(), release], [...protectedVersions, version])) await rm(this.location(victim.version), { recursive: true });
+      report({ step: 4, total: 4, stage: '保存已安装版本' });
       await rename(staging, this.location(version));
     } finally { await rm(staging, { recursive: true, force: true }); }
+  }
+  async remove(version) {
+    exactVersion(version);
+    if (!(await this.list()).some(item => item.version === version)) throw new Error('该版本尚未安装');
+    await rm(this.location(version), { recursive: true });
   }
 }

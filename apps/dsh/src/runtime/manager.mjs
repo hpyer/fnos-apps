@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { watch } from 'node:fs';
-import { copyFile, lstat, mkdir, readdir, rename, rm, rmdir, symlink, unlink, writeFile, readlink } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, readdir, rename, rm, rmdir, symlink, unlink, writeFile, readlink } from 'node:fs/promises';
 import { loadConfig, readJson, writeJson } from '../shared/config.mjs';
 import { Versions, exactVersion } from './versions.mjs';
 import { DshProcess } from './process.mjs';
@@ -12,6 +12,10 @@ import { run, redact } from '../shared/command.mjs';
 export class Manager {
   constructor(root, environment, dependencies = {}) {
     this.root = root;
+    this.configRoot = dependencies.configRoot ?? root;
+    this.versionPointer = dependencies.versionPointer === false ? null : (dependencies.versionPointer ?? path.join(root, 'runtimes/current'));
+    this.exposeSettings = dependencies.exposeSettings !== false;
+    this.initialVersion = dependencies.initialVersion ?? null;
     this.environment = environment;
     this.abort = new AbortController();
     this.versions = dependencies.versions ?? new Versions(root, environment, { signal: this.abort.signal });
@@ -28,19 +32,27 @@ export class Manager {
     this.error = null;
     this.releases = [];
     this.stopping = false;
+    this.lastActivityAt = null;
+    this.activeConnections = 0;
+    this.idleStopped = false;
   }
   async init() {
-    this.config = await loadConfig(this.root);
-    this.state = await readJson(path.join(this.root, 'state.json'), { current: null, marketInstalled: false });
+    await mkdir(this.root, { recursive: true, mode: 0o700 });
+    this.config = await loadConfig(this.configRoot);
+    this.state = await readJson(path.join(this.root, 'state.json'), { current: this.initialVersion, marketInstalled: false });
+    this.state.current ??= this.initialVersion;
+    this.state.marketInstalled ??= false;
     // The atomic symlink is authoritative if a crash interrupts the state-file write.
-    try {
-      const pointer = await readlink(path.join(this.root, 'runtimes/current'));
-      if (!pointer.startsWith('versions/')) throw new Error('当前版本指针格式无效');
-      this.state.current = exactVersion(pointer.slice('versions/'.length));
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (this.versionPointer) {
+      try {
+        const pointer = await readlink(this.versionPointer);
+        if (!pointer.startsWith('versions/')) throw new Error('当前版本指针格式无效');
+        this.state.current = exactVersion(pointer.slice('versions/'.length));
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
     await this.migrateLegacyHome();
     await mkdir(this.environment.DSH_HOME, { recursive: true, mode: 0o700 });
-    this.settingsDocument = await this.exposeSettingsDocument();
+    this.settingsDocument = this.exposeSettings ? await this.exposeSettingsDocument() : path.join(this.environment.DSH_HOME, 'settings.yaml');
   }
   async migrateLegacyHome() {
     const source = this.environment.DSH_LEGACY_HOME;
@@ -147,9 +159,56 @@ export class Manager {
   async ensureMarket(version) {
     if (this.state.marketInstalled) return;
     // Use DSH's own profile-aware CLI instead of writing plugin files directly.
-    await this.execute(process.execPath, [this.versions.entry(version), 'plugin', '--profile', 'web', 'add', 'dshmarket'], {
+    const install = () => this.execute(process.execPath, [this.versions.entry(version), 'plugin', '--profile', 'web', 'add', 'dshmarket'], {
       cwd: this.versions.location(version), env: { ...this.environment, npm_config_registry: this.config.registry }, timeout: 900_000, signal: this.abort.signal,
     });
+    const profile = path.join(this.environment.DSH_HOME, 'profiles', 'web');
+    const inaccessibleManifest = error => /failed to read profile manifest .*profiles\/web\/package\.json.*\bEACCES\b/i.test(String(error.message));
+    const resetProfile = async () => {
+      const backup = path.join(path.dirname(profile), `web.permission-backup-${Date.now()}`);
+      try { await rename(profile, backup); }
+      catch (error) { throw new Error(`无法备份不可访问的 DSH profile：${error.message}`); }
+      return backup;
+    };
+    // fnOS gives the application directory ACL access.  A profile created
+    // while the app inherited a restrictive umask can nevertheless leave the
+    // DSH web worker unable to reopen its own manifest.  This is only used on
+    // that exact recovery path; the selected user home remains the isolation
+    // boundary, not a package file's owner-only mode bits.
+    const makeProfileReadable = async directory => {
+      await chmod(directory, 0o755);
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name);
+        if (entry.isDirectory()) await makeProfileReadable(target);
+        else if (entry.isFile()) await chmod(target, 0o644);
+      }
+    };
+    try { await install(); }
+    catch (error) {
+      // A cancelled first run can leave profile node_modules with an ACL from
+      // an older app build. Keep the user's profile manifest and every other
+      // DSH datum, then let pnpm recreate only its derived dependency tree.
+      if (!/\bEACCES\b/i.test(String(error.message))) throw error;
+      try {
+        await rm(path.join(profile, 'node_modules'), { recursive: true, force: true });
+        await rm(path.join(profile, 'pnpm-lock.yaml'), { force: true });
+      } catch (repairError) {
+        throw new Error(`DSH 插件目录权限异常，且无法重建依赖：${repairError.message}`);
+      }
+      try { await install(); }
+      catch (retryError) {
+        if (!inaccessibleManifest(retryError)) throw new Error(`DSH 插件目录权限异常，重建依赖后仍无法安装：${retryError.message}`);
+        await resetProfile();
+        try { await install(); }
+        catch (profileError) {
+          if (!inaccessibleManifest(profileError)) throw new Error(`DSH profile 权限异常，已备份原 profile 但仍无法创建新 profile：${profileError.message}`);
+          try { await makeProfileReadable(profile); }
+          catch (permissionError) { throw new Error(`DSH profile 权限异常，无法修复新 profile 的读取权限：${permissionError.message}`); }
+          try { await install(); }
+          catch (finalError) { throw new Error(`DSH profile 权限异常，已修复读取权限但仍无法安装：${finalError.message}`); }
+        }
+      }
+    }
     this.state.marketInstalled = true;
     await this.save();
   }
@@ -165,7 +224,35 @@ export class Manager {
       PATH: `${path.join(this.versions.location(version), 'node_modules/.bin')}:${this.environment.PATH}`,
     };
     await this.process.start(this.versions.entry(version), this.environment.DSH_HOME, patch);
+    this.idleStopped = false;
+    this.touchActivity();
     this.watchPluginProfile();
+  }
+  touchActivity() {
+    if (this.process.child && this.process.address) this.lastActivityAt = Date.now();
+  }
+  openActivityConnection() {
+    this.touchActivity();
+    this.activeConnections += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.activeConnections = Math.max(0, this.activeConnections - 1);
+      this.touchActivity();
+    };
+  }
+  async stopRuntime() {
+    clearTimeout(this.pluginRestartTimer);
+    this.pluginRestartTimer = null;
+    this.pluginRestartIdleChecks = 0;
+    await this.process.stop();
+    this.lastActivityAt = null;
+    this.activeConnections = 0;
+  }
+  async stopForIdle() {
+    await this.stopRuntime();
+    this.idleStopped = true;
   }
   watchPluginProfile() {
     if (this.stopping || this.profileWatcher) return;
@@ -200,7 +287,7 @@ export class Manager {
     return 'idle';
   }
   async restartForPluginChange(generation = this.pluginChangeGeneration) {
-    if (this.stopping || !this.state.current) return;
+    if (this.stopping || !this.state.current || this.idleStopped) return;
     if (generation !== this.pluginChangeGeneration) return this.schedulePluginRestart();
     if (this.busy) {
       this.pluginRestartIdleChecks = 0;
@@ -226,23 +313,25 @@ export class Manager {
     exactVersion(version);
     if (!(await this.versions.list()).some(x => x.version === version)) throw new Error('该版本尚未安装');
     const previous = this.state.current;
-    await this.process.stop();
+    await this.stopRuntime();
     try {
       await this.startVersion(version);
-      const current = path.join(this.root, 'runtimes/current');
-      const temporary = `${current}.tmp`;
-      await rm(temporary, { force: true });
-      // Commit the healthy runtime through an atomic pointer replacement. The
-      // previous pointer remains available until the new child is verified.
-      await symlink(path.join('versions', version), temporary);
-      await rename(temporary, current);
+      if (this.versionPointer) {
+        const temporary = `${this.versionPointer}.tmp`;
+        await mkdir(path.dirname(this.versionPointer), { recursive: true, mode: 0o700 });
+        await rm(temporary, { force: true });
+        // Commit the healthy runtime through an atomic pointer replacement. The
+        // previous pointer remains available until the new child is verified.
+        await symlink(path.join('versions', version), temporary);
+        await rename(temporary, this.versionPointer);
+      }
       this.state.current = version;
       // The runtime is already healthy and the authoritative pointer committed.
       // Failure to write auxiliary state must not roll it back to a different process.
       try { await this.save(); }
       catch { this.error = 'DSH 已切换，但辅助状态文件写入失败，请检查磁盘空间与权限'; }
     } catch (error) {
-      await this.process.stop();
+      await this.stopRuntime();
       this.state.current = previous;
       // A failed candidate never becomes current. Restore the previous process
       // when possible, while leaving its runtime files untouched for diagnosis.
@@ -254,19 +343,22 @@ export class Manager {
     }
   }
   async dispatch(action, data = {}) {
-    const labels = { check: '检查更新', download: '下载版本', activate: '切换版本', restart: '重启 DSH', market: '安装插件市场' };
+    const labels = { check: '检查更新', download: '下载版本', remove: '删除版本', activate: '切换版本', restart: '重启 DSH', market: '安装插件市场' };
     if (!labels[action]) throw new Error('未知操作');
     return this.exclusive(labels[action], async () => {
       switch (action) {
         case 'check': this.releases = await this.versions.check(this.config); break;
-        case 'download': await this.versions.install(this.config, exactVersion(data.version), [this.state.current]); break;
+        case 'download': await this.versions.install(this.config, exactVersion(data.version)); break;
+        case 'remove':
+          if (exactVersion(data.version) === this.state.current) throw new Error('当前版本正在使用，无法删除');
+          await this.versions.remove(data.version); break;
         case 'activate': await this.activate(data.version); break;
         case 'restart':
           if (!this.state.current) throw new Error('请先下载并启用一个 DSH 版本');
           await this.activate(this.state.current); break;
         case 'market':
           if (!this.state.current) throw new Error('请先启用一个 DSH 版本');
-          await this.process.stop();
+          await this.stopRuntime();
           this.state.marketInstalled = false;
           await this.save();
           await this.activate(this.state.current); break;
@@ -280,6 +372,6 @@ export class Manager {
     this.profileWatcher?.close();
     this.profileWatcher = null;
     this.abort.abort();
-    await this.process.stop();
+    await this.stopRuntime();
   }
 }
