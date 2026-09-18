@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import net from 'node:net';
 import { createDshGateway, Sessions } from '../src/server/gateway.mjs';
 import { listen } from '../src/server/server.mjs';
@@ -125,11 +126,15 @@ test('the DSH shell exposes authenticated status, restart, and settings navigati
   const shellCss = await shellStyle.text();
   assert.match(shellCss, /fnos-dsh-spin/);
   assert.match(shellCss, /@media\(max-width:620px\)/);
-  assert.match(shellCss, /transform:none/);
+  assert.match(shellCss, /right:0;left:0;margin-inline:auto;transform:none;width:max-content;max-width:calc\(100vw - 16px - env\(safe-area-inset-left,0px\) - env\(safe-area-inset-right,0px\)\)/);
   assert.match(shellCss, /backdrop-filter:none/);
   assert.match(shellCss, /\[data-role=panel\][^{]*\{[^}]*width:288px/);
   assert.match(shellCss, /grid-template-columns:repeat\(3,1fr\)/);
   assert.match(shellCss, /bottom:calc\(8px \+ env\(safe-area-inset-bottom,0px\)\)/);
+});
+test('the mobile admin status island centers without creating a fixed-position container', async () => {
+  const css = await readFile(new URL('../src/web/admin/index.css', import.meta.url), 'utf8');
+  assert.match(css, /\.top-status\{right:0;left:0;margin-inline:auto;transform:none;width:max-content;max-width:calc\(100vw - 16px - env\(safe-area-inset-left,0px\) - env\(safe-area-inset-right,0px\)\)/);
 });
 test('reopen waits for DSH readiness before minting a fresh navigation ticket', async t => {
   const f = await fixture(t);
