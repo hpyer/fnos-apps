@@ -2,6 +2,28 @@
 
 DSH for fnOS 在飞牛 NAS 上为每个用户按需运行独立的 DeepSeek Harness（DSH）实例。每个用户首次打开时在自己的飞牛主目录中选择并授权一个 DSH 工作目录，DSH 配置、插件、会话和工作区保存在该目录；管理员统一下载运行时，用户可从已安装版本中选择。
 
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="screenshots/pc-1.png"><img src="screenshots/pc-1.png" alt="桌面端 DSH 主界面" width="100%"></a><br>
+      <sub>桌面端主界面</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="screenshots/pc-2.png"><img src="screenshots/pc-2.png" alt="桌面端 DSH 设置界面" width="100%"></a><br>
+      <sub>桌面端设置界面</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="screenshots/mobile-1.jpg"><img src="screenshots/mobile-1.jpg" alt="移动端 DSH 主界面" width="30%"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="screenshots/mobile-2.jpg"><img src="screenshots/mobile-2.jpg" alt="移动端 DSH 设置界面" width="30%"></a>
+</p>
+<p align="center"><sub>移动端主界面与设置界面</sub></p>
+
 ## 功能
 
 - 通过飞牛统一网关 `/app/dsh-for-fnos/` 访问，主界面位于其 `dsh/` 子路径；无需额外开放 3080 端口。
