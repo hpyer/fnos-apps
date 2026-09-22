@@ -1,5 +1,7 @@
 import pty from "node-pty";
 import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+const bashrc = fileURLToPath(new URL("./bashrc", import.meta.url));
 let terminal,
   stopping = false,
   pending = 0;
@@ -47,7 +49,7 @@ process.on("uncaughtException", () => {
 });
 process.on("message", (message) => {
   if (message.type === "start" && !terminal) {
-    terminal = pty.spawn("/bin/bash", ["--noprofile", "--norc"], {
+    terminal = pty.spawn("/bin/bash", ["--noprofile", "--rcfile", bashrc], {
       name: "xterm-256color",
       cols: message.cols,
       rows: message.rows,

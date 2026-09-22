@@ -7,8 +7,9 @@
 - 需要管理员账号权限时，可在终端中执行 `su <管理员用户名>` 并由系统验证密码；应用不保存或代填账号凭据。
 - 每个管理员最多一个连接，全应用最多四个；不同管理员的 Shell 仍共享同一个包用户和 HOME，不提供 OS 用户隔离。
 - 支持中文、常见 emoji（含国旗组合字符）、终端尺寸调整、交互程序、Ctrl+C、清屏、断开与新建会话。
+- xterm.js 原生支持 ANSI/256 色；终端默认启用常见的目录、链接、可执行文件颜色，以及 `ls`、`ll`、`la`、`l` 别名和彩色提示符。用户可在 `/vol1/@appshare/xterm-for-fnos/bashrc` 添加自定义命令和别名。
 - 断开即回收会话；异常断网由心跳检测，通常在 30 秒内回收。没有会话保活或自动重连。
-- HOME 为 `${TRIM_PKGVAR}/home`；Bash 不加载 profile/bashrc。服务只传入允许的基础环境变量，不记录终端正文。
+- HOME 为 `${TRIM_PKGVAR}/home`；Bash 不加载飞牛用户的 profile/bashrc，仅加载应用内置配置和 data-share 中的 `bashrc`，所有用户共享。
 
 安装对应架构的 FPK，需要 fnOS ≥ 1.1.3100 与 `nodejs_v24`。打开「Xterm for fnOS」，点击「连接终端」。
 

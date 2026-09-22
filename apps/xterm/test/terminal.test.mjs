@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createTerminalFactory } from "../src/terminal.mjs";
@@ -10,6 +10,8 @@ test(
   async (t) => {
     const home = await mkdtemp(tmpdir() + "/xterm-pty-");
     t.after(() => rm(home, { recursive: true, force: true }));
+    const userBashrc = home + "/bashrc";
+    await writeFile(userBashrc, "alias usercmd='printf USER_CONFIG_OK'\n");
     let output = "",
       terminal;
     const waiters = [];
@@ -20,7 +22,11 @@ test(
     terminal = createTerminalFactory({
       home,
       worker: fileURLToPath(new URL("../src/worker.mjs", import.meta.url)),
-      environment: { PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8" },
+      environment: {
+        PATH: "/usr/bin:/bin",
+        LANG: "en_US.UTF-8",
+        XTERM_USER_BASHRC: userBashrc,
+      },
     })({ type: "open", cols: 80, rows: 24 }, (message) => {
       if (message.type === "data") {
         output += message.data;
@@ -29,6 +35,11 @@ test(
       }
     });
     t.after(() => terminal.stop());
+    await wait(/\x1b\[1;32m/);
+    terminal.input("type ll\r");
+    await wait(/ll is aliased to .*ls -alF/);
+    terminal.input("type usercmd\r");
+    await wait(/usercmd is aliased to .*printf USER_CONFIG_OK/);
     terminal.input(
       "printf '\\120\\124\\131_READY'; test -t 0 && printf '\\124\\124\\131_OK'; printf '\\344\\270\\255\\346\\226\\207'; echo $$\r",
     );

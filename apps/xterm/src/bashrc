@@ -1,0 +1,17 @@
+# Keep the terminal useful without depending on the user's shell profile.
+# GNU coreutils ls understands --color; BSD ls does not.
+if command ls --color=auto -d . >/dev/null 2>&1; then
+  export LS_COLORS='di=1;34:ln=1;36:so=1;35:pi=33:ex=1;32:bd=1;33:cd=1;33:su=1;41:sg=1;46:tw=1;42:ow=1;43'
+  alias ls='ls --color=auto'
+  alias ll='ls -alF'
+  alias la='ls -A'
+  alias l='ls -CF'
+fi
+
+# Keep the prompt compact while making the host and working directory easy to scan.
+PS1='\[\033[1;32m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
+
+# Optional user overrides live in fnOS's app data-share and survive upgrades.
+if [ -r "${XTERM_USER_BASHRC:-}" ]; then
+  . "$XTERM_USER_BASHRC"
+fi
