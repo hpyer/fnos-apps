@@ -2,6 +2,31 @@
 
 管理员专用的 fnOS 原生终端。使用 xterm.js、Node.js 和 node-pty，在飞牛桌面窗口中运行本机 Bash，不依赖 Docker 或 SSH。
 
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="screenshots/xterm-for-fnos-pc-1.png"><img src="screenshots/xterm-for-fnos-pc-1.png" alt="桌面端 Xterm 未连接界面" width="100%"></a><br>
+      <sub>桌面端未连接界面</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="screenshots/xterm-for-fnos-pc-2.png"><img src="screenshots/xterm-for-fnos-pc-2.png" alt="桌面端 Xterm 已连接界面" width="100%"></a><br>
+      <sub>桌面端已连接界面</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="screenshots/xterm-for-fnos-mobile-1.jpg"><img src="screenshots/xterm-for-fnos-mobile-1.jpg" alt="移动端 Xterm 未连接界面" width="30%"></a><br>
+      <sub>移动端未连接界面</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="screenshots/xterm-for-fnos-mobile-2.jpg"><img src="screenshots/xterm-for-fnos-mobile-2.jpg" alt="移动端 Xterm 已连接界面" width="30%"></a><br>
+      <sub>移动端已连接界面</sub>
+    </td>
+  </tr>
+</table>
+
 - 通过飞牛统一网关访问，无需额外开放端口。
 - Shell **以应用包用户运行**，不是当前登录的飞牛用户，也不是 root。页面显示实际账号和 UID。
 - 需要管理员账号权限时，可在终端中执行 `su <管理员用户名>` 并由系统验证密码；应用不保存或代填账号凭据。
