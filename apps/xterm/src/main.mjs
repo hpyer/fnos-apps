@@ -11,8 +11,6 @@ const root =
 if (!root) throw Error("缺少 TRIM_PKGVAR");
 const home = path.join(root, "home");
 await mkdir(home, { recursive: true, mode: 0o700 });
-const dataShare = process.env.TRIM_DATA_SHARE_PATHS?.split(":").find(Boolean);
-const userBashrc = dataShare ? path.join(dataShare, "bashrc") : "";
 // Do not inherit NAS cookies, application credentials or the full host env.
 const environment = {
   PATH: "/var/apps/nodejs_v24/target/bin:/usr/local/bin:/usr/bin:/bin",
@@ -20,7 +18,6 @@ const environment = {
   BASH_SILENCE_DEPRECATION_WARNING: "1",
   EXINIT: "if exists('+emoji') | set noemoji | endif",
   HOME: home,
-  XTERM_USER_BASHRC: userBashrc,
   USER: os.userInfo().username,
   LOGNAME: os.userInfo().username,
 };

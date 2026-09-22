@@ -23,6 +23,7 @@ await cp(
   path.join(target, "app/worker.mjs"),
 );
 await cp(path.join(source, "src/bashrc"), path.join(target, "app/bashrc"));
+await cp(path.join(source, "src/su-shell"), path.join(target, "app/su-shell"));
 for (const name of ["node-pty", "ws"]) {
   const installed = await realpath(path.join(source, "node_modules", name)),
     out = path.join(target, "app/node_modules", name);

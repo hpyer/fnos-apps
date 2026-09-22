@@ -2,6 +2,7 @@ import pty from "node-pty";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 const bashrc = fileURLToPath(new URL("./bashrc", import.meta.url));
+const suShell = fileURLToPath(new URL("./su-shell", import.meta.url));
 let terminal,
   stopping = false,
   pending = 0;
@@ -57,6 +58,8 @@ process.on("message", (message) => {
       env: {
         ...process.env,
         HOME: message.home,
+        XTERM_BASHRC: bashrc,
+        XTERM_SU_SHELL: suShell,
         TERM: "xterm-256color",
         PS1: "\\u@\\h:\\w\\$ ",
       },

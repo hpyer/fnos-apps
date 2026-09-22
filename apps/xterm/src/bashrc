@@ -11,7 +11,9 @@ fi
 # Keep the prompt compact while making the host and working directory easy to scan.
 PS1='\[\033[1;32m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
 
-# Optional user overrides live in fnOS's app data-share and survive upgrades.
-if [ -r "${XTERM_USER_BASHRC:-}" ]; then
-  . "$XTERM_USER_BASHRC"
+# Start the target user's shell with the same defaults when `su` changes users.
+if [ -x "${XTERM_SU_SHELL:-}" ]; then
+  su() {
+    command su -s "$XTERM_SU_SHELL" "$@"
+  }
 fi

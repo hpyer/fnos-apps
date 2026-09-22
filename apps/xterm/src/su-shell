@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+wrapper_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+bashrc=${XTERM_BASHRC:-$wrapper_dir/bashrc}
+export XTERM_BASHRC="$bashrc"
+export XTERM_SU_SHELL="$wrapper_dir/su-shell"
+
+if [ "$#" -eq 0 ]; then
+  exec /bin/bash --noprofile --rcfile "$bashrc" -i
+fi
+exec /bin/bash --noprofile --rcfile "$bashrc" "$@"
