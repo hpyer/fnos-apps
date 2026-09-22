@@ -10,18 +10,17 @@
   </head>
   <body>
     <header>
-      <img src="./icon.png" width="30" height="30" alt="" />
-      <h1>Xterm <span>for fnOS</span></h1>
+      <div class="session-info">
+        <span id="identity">应用包用户 · 本机 Shell</span>
+        <span class="session-divider" aria-hidden="true"></span>
+        <span id="status" role="status" aria-live="polite">未连接</span>
+      </div>
       <nav aria-label="终端操作">
         <button id="connect" class="primary">连接终端</button
         ><button id="disconnect" disabled>断开</button
         ><button id="clear">清屏</button>
       </nav>
     </header>
-    <div class="context">
-      <span id="identity">应用包用户 · 本机 Shell</span
-      ><span id="status" role="status" aria-live="polite">未连接</span>
-    </div>
     <main>
       <div id="terminal" aria-label="交互式终端"></div>
       <div id="empty">

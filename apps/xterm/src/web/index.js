@@ -115,7 +115,7 @@ $("connect").onclick = async () => {
       socket = null;
       $("connect").disabled = false;
       $("disconnect").disabled = true;
-      $("connect").textContent = "新建会话";
+      $("connect").textContent = "连接终端";
       $("status").textContent = event.reason || "连接已结束";
     };
     ws.onerror = () => {
