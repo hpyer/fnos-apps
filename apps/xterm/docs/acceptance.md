@@ -2,6 +2,8 @@
 
 ## 本机范围
 
+2026-09-22：Xterm for fnOS 版本为 1.1.0。本机 macOS / Node 24 已通过 `pnpm --filter @fnos/xterm test`（6 项）、`pnpm run build xterm` 和 `pnpm run pack xterm --all`；Shell wrapper 已通过语法检查并随构建产物打包，已生成 x86/arm 两份 FPK。`su` 在 fnOS 实机上的真实用户切换、权限和目标用户 HOME 仍需实机验证，不能以本机测试替代。
+
 2026-09-15：`pnpm test` 全仓 43 项通过（DSH 37、Xterm 6）；`pnpm run build xterm` 与 `pnpm run pack xterm --all` 通过。浏览器连接真实 PTY 后用 `vi` 验证国旗 emoji 显示和后续文本列对齐。Xterm for fnOS 版本为 1.0.1；该版本仍需 fnOS 实机升级验证。
 
 2026-09-14：`pnpm test` 全仓 43 项通过（DSH 37、Xterm 6）；`pnpm run build xterm` 与 `pnpm run pack xterm --all` 通过。Xterm for fnOS 版本为 1.0.0。
