@@ -1,5 +1,5 @@
 appname = dsh-for-fnos
-version = 1.1.1
+version = 1.1.2
 display_name = DSH for fnOS
 desc = DeepSeek Harness 原生多用户运行管理器，支持独立配置、会话、工作区与按用户版本切换。
 platform = x86
