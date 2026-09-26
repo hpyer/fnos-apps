@@ -31,7 +31,7 @@ pnpm run build --app dsh
 | `pnpm test` | 运行所有应用测试 |
 | `pnpm run dev <slug>` | 启动指定应用的本地开发模式 |
 | `pnpm run build <slug>` | 构建指定应用到 `dist/<APP_ID>` |
-| `pnpm run pack <slug> [选项]` | 将已构建应用打包成 FPK |
+| `pnpm run pack <slug> [选项]` | 重新构建指定应用并打包成 FPK |
 | `pnpm run check <slug> [选项]` | 执行指定应用的发布前一致性检查 |
 | `pnpm run release [子命令] <slug> [选项]` | 查看发布信息、提取说明或生成标签 |
 | `pnpm run create <slug> <显示名称> [默认端口]` | 创建新应用脚手架 |
@@ -72,10 +72,9 @@ pnpm run build dsh
 
 ## 打包
 
-打包前必须先构建应用：
+`pnpm run pack` 会先重新构建指定应用，再将构建产物打包。CI 通过 `node scripts/pack.mjs` 打包之前构建并上传的产物。
 
 ```sh
-pnpm run build <slug>
 pnpm run pack <slug> [--arch x86|arm] [--all] [--version <版本>] [--output <目录>]
 ```
 
@@ -83,7 +82,7 @@ pnpm run pack <slug> [--arch x86|arm] [--all] [--version <版本>] [--output <�
 | --- | --- |
 | `--arch x86\|arm` | 打包单一架构；未指定时默认 `x86` |
 | `--all` | 按应用元数据中的 `SUPPORTED_ARCH` 打包全部架构；指定后以它为准，不再读取 `--arch` |
-| `--version <版本>` | 临时写入 FPK manifest 的版本；默认使用应用发布元数据版本 |
+| `--version <版本>` | 指定打包版本；必须与应用 package.json、原生 manifest 一致 |
 | `--output <目录>` | FPK 输出目录；默认 `dist/release` |
 | `--app <slug>` | 使用选项而非位置参数指定应用 |
 
@@ -98,14 +97,14 @@ pnpm run pack dsh --arch arm
 # 打包应用声明支持的全部架构
 pnpm run pack dsh --all
 
-# 指定版本和输出目录
-pnpm run pack dsh --all --version 1.0.0 --output ./artifacts
+# 指定输出目录
+pnpm run pack dsh --all --output ./artifacts
 
 # 使用非全局 fnpack
 FNPACK_BIN=/absolute/path/to/fnpack pnpm run pack dsh --all
 ```
 
-默认文件名为 `dist/release/<FILE_PREFIX>_v<VERSION>_<ARCH>.fpk`。打包过程只修改临时副本中的 `version` 和 `platform`，不会改写应用源码里的 manifest。
+默认文件名为 `dist/release/<FILE_PREFIX>_v<VERSION>_<ARCH>.fpk`。打包时会检查 package.json、源码 manifest 与构建产物的版本一致；只在临时副本中写入目标 `platform`，不会改写应用源码里的 manifest。
 
 仓库还提供 CI/Linux 使用的官方 `fnpack` 安装器：
 

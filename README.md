@@ -21,8 +21,7 @@ pnpm test
 # 本地开发 DSH
 pnpm run dev dsh
 
-# 构建并打包 DSH 的全部支持架构
-pnpm run build dsh
+# 重新构建并打包 DSH 的全部支持架构
 pnpm run pack dsh --all
 
 # 发布前检查

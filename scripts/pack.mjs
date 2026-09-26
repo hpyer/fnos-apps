@@ -12,9 +12,14 @@ if (invalid.length) throw new Error(`不支持的架构：${invalid.join(', ')}�
 
 const version = options.version || app.version;
 if (!/^[0-9A-Za-z][0-9A-Za-z.+-]*$/.test(version)) throw new Error(`版本号格式无效：${version}`);
+if (version !== app.packageJson.version) throw new Error(`打包版本 ${version} 与 ${app.slug}/package.json 版本 ${app.packageJson.version} 不一致`);
+const manifestVersion = app.manifestSource.match(/^\s*version\s*=\s*(.+?)\s*$/m)?.[1];
+if (manifestVersion !== version) throw new Error(`打包版本 ${version} 与 ${app.slug}/native/manifest 版本 ${manifestVersion ?? '缺失'} 不一致`);
 const outputDir = path.resolve(options.output || path.join(root, 'dist', 'release'));
 await mkdir(outputDir, { recursive: true });
 await stat(app.distDir).catch(() => { throw new Error(`请先构建应用：${app.distDir}`); });
+const builtManifestVersion = (await readFile(path.join(app.distDir, 'manifest'), 'utf8')).match(/^\s*version\s*=\s*(.+?)\s*$/m)?.[1];
+if (builtManifestVersion !== version) throw new Error(`构建产物版本 ${builtManifestVersion ?? '缺失'} 与打包版本 ${version} 不一致，请先重新构建 ${app.slug}`);
 
 function patchManifest(source, targetVersion, platform) {
   if (!/^\s*version\s*=/m.test(source) || !/^\s*platform\s*=/m.test(source)) {

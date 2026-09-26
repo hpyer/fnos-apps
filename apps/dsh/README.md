@@ -59,6 +59,7 @@ pnpm run check dsh
 ```
 
 FPK 输出到根目录 `dist/release/`。当前应用依赖 fnOS 的 `nodejs_v24`，最低支持 fnOS 1.2.0401；手机端目录授权要求飞牛 App 1.34.0 或更高版本。同一份 Node.js 源码可分别打包为 x86 与 arm FPK。
+`pnpm run pack dsh` 每次都会先重新构建，避免把旧 `dist/` 内容打进新 FPK；单独执行 `pnpm run build dsh` 可检查构建结果。
 
 ## 源码结构
 
