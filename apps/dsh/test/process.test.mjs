@@ -7,9 +7,9 @@ import os from 'node:os';
 import { probe, DshProcess } from '../src/runtime/process.mjs';
 import { listen } from '../src/server/server.mjs';
 
-test('readiness exchanges the DSH launch token and verifies the authenticated index', async t => {
+for (const location of ['/', './']) test(`readiness accepts a ${location} token redirect and verifies the authenticated index`, async t => {
   const server = http.createServer((req, res) => {
-    if (req.url === '/?token=test') { res.writeHead(303, { location: '/', 'set-cookie': 'dsh_auth=yes; HttpOnly; Path=/' }); res.end(); }
+    if (req.url === '/?token=test') { res.writeHead(303, { location, 'set-cookie': 'dsh_auth=yes; HttpOnly; Path=/' }); res.end(); }
     else { res.writeHead(req.headers.cookie === 'dsh_auth=yes' ? 200 : 401); res.end('index'); }
   });
   await listen(server, { host: '127.0.0.1', port: 0 });
@@ -17,6 +17,15 @@ test('readiness exchanges the DSH launch token and verifies the authenticated in
   const url = new URL(`http://127.0.0.1:${server.address().port}/?token=test`);
   assert.equal(await probe(url), true);
   assert.equal(await probe(new URL('/', url)), false);
+});
+test('readiness rejects a token redirect away from the authenticated index', async t => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(303, { location: '/other', 'set-cookie': 'dsh_auth=yes; HttpOnly; Path=/' });
+    res.end();
+  });
+  await listen(server, { host: '127.0.0.1', port: 0 });
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  assert.equal(await probe(new URL(`http://127.0.0.1:${server.address().port}/?token=test`)), false);
 });
 test('owned process can observe a market operation through its authenticated session', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-market-'));
@@ -36,6 +45,16 @@ test('an unavailable market status is never treated as a completed operation', a
   process.address = new URL(`http://127.0.0.1:${server.address().port}/`);
   assert.equal(await process.pluginOperationState(), 'unavailable');
   assert.equal(await process.pluginOperationActive(), true);
+});
+test('owned process starts when DSH redirects the launch token to ./', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-token-'));
+  const entry = path.join(root, 'fixture.mjs');
+  await writeFile(entry, `import http from 'node:http'; const s=http.createServer((q,r)=>{if(q.url==='/?token=test'){r.writeHead(303,{location:'./','set-cookie':'dsh_auth=yes; HttpOnly; Path=/'});return r.end()}r.writeHead(q.headers.cookie==='dsh_auth=yes'?200:401);r.end('index')});s.listen(0,'127.0.0.1',()=>console.log('dsh web: http://127.0.0.1:'+s.address().port+'/?token=test'));`);
+  const process = new DshProcess({ ...globalThis.process.env });
+  t.after(async () => { await process.stop(); await rm(root, { recursive: true, force: true }); });
+  await process.start(entry, root);
+  assert.equal(process.authCookie, 'dsh_auth=yes');
+  assert.equal((await fetch(new URL('/', process.address), { headers: { cookie: process.authCookie } })).status, 200);
 });
 test('owned worker starts and stops a real child server', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-'));

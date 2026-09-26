@@ -8,10 +8,12 @@ async function authenticatedProbe(address) {
   if (response.ok) return { ok: true, cookie: '' };
   // Recent DSH exchanges its launch token for an HttpOnly cookie and a 303.
   // Node fetch does not maintain a cookie jar across redirects.
-  if (response.status !== 303 || response.headers.get('location') !== '/') return { ok: false, cookie: '' };
+  const location = response.headers.get('location');
+  const indexUrl = new URL('/', address);
+  if (response.status !== 303 || !location || new URL(location, address).href !== indexUrl.href) return { ok: false, cookie: '' };
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   if (!cookie) return { ok: false, cookie: '' };
-  const index = await fetch(new URL('/', address), { redirect: 'manual', headers: { cookie }, signal: AbortSignal.timeout(1500) });
+  const index = await fetch(indexUrl, { redirect: 'manual', headers: { cookie }, signal: AbortSignal.timeout(1500) });
   await index.body?.cancel();
   return { ok: index.ok, cookie: index.ok ? cookie : '' };
 }
