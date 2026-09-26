@@ -27,7 +27,9 @@ export class DshProcess {
     // that exposes it externally and applies the browser session boundary.
     const args = [entry, 'web', ...(patch ? ['--patch', patch] : []), '--no-open', '--host', '127.0.0.1', '--port', '0'];
     const child = spawn(process.execPath, [fileURLToPath(new URL('./worker.mjs', import.meta.url)), ...args], {
-      cwd, env: this.environment, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      // fnOS package accounts commonly have nologin as their account shell.
+      // DSH's terminal uses SHELL as its default, so provide a usable shell.
+      cwd, env: { ...this.environment, SHELL: '/bin/sh' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     this.child = child;
     let line = '';

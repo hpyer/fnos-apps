@@ -69,3 +69,12 @@ test('owned worker starts and stops a real child server', async t => {
   assert.equal(process.child, null);
   await assert.rejects(fetch(address));
 });
+test('owned DSH receives an interactive shell when the package account uses nologin', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-process-shell-'));
+  const entry = path.join(root, 'fixture.mjs');
+  await writeFile(entry, `import http from 'node:http'; const s=http.createServer((q,r)=>r.end(process.env.SHELL));s.listen(0,'127.0.0.1',()=>console.log('dsh web: http://127.0.0.1:'+s.address().port+'/'));`);
+  const process = new DshProcess({ ...globalThis.process.env, SHELL: '/usr/sbin/nologin' });
+  t.after(async () => { await process.stop(); await rm(root, { recursive: true, force: true }); });
+  await process.start(entry, root);
+  assert.equal(await (await fetch(process.address)).text(), '/bin/sh');
+});
