@@ -34,10 +34,9 @@ dialog[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:min(
   .service-summary{grid-column:1/-1;flex-wrap:nowrap;gap:10px}
   .status{min-width:0}
   #running{flex:none;white-space:nowrap}
-  .service-actions{grid-column:1;width:auto;flex-wrap:nowrap;gap:8px}
-  .reload-actions{grid-column:2;min-width:0;justify-content:flex-start}
-  .reload-actions button{min-height:38px;padding-inline:8px}
-  .service-actions button{min-height:38px}
+  .service-actions{grid-column:1;width:auto;flex-wrap:nowrap;gap:6px}
+  .reload-actions{grid-column:2;min-width:0;justify-content:flex-end}
+  .service-actions button,.reload-actions button{min-height:32px;padding:5px 8px;font-size:11px}
   dialog[open]{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}
   .dialog-head{padding:10px 12px}
   .dialog-body{padding:10px 12px}
