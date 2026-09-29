@@ -23,6 +23,7 @@ test('站点文件仅接受顶层 server 块且阻止路径穿越', () => {
 
 test('候选配置验证失败不会覆盖线上站点文件', async t => {
   const manager = await fixture(t);
+  assert.doesNotMatch(await manager.readConfig(), /^user /);
   await manager.saveSite('example.conf', 'server { listen 8080; }');
   manager.run = async (_binary, args) => {
     const conf = await readFile(args[args.indexOf('-c') + 1], 'utf8');
@@ -138,7 +139,7 @@ test('候选站点配置使用可写的应用临时目录，清理后校验会�
     }
     return 'nginx: configuration file test is successful';
   };
-  await manager.saveSite('new.conf', 'server { listen 1003; }');
+  await manager.saveSite('new.conf', 'server { listen 8083; }');
 });
 
 test('共享临时目录中的软链接不会被当作 worker 目录修改', async t => {
@@ -203,7 +204,7 @@ test('通知默认关闭且间隔必须有效', () => {
   assert.throws(() => notificationSettings({ notificationEnabled: true, notificationPath: 'relative', intervalMinutes: 30 }), /绝对路径/);
 });
 
-test('旧安装迁移到应用共享目录并修复 worker 主组和初始错误日志', async t => {
+test('旧安装迁移到应用共享目录并移除已失效的 user 指令', async t => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'fnos-nginx-migrate-'));
   t.after(() => rm(parent, { recursive: true, force: true }));
   const root = path.join(parent, '@appdata/nginx-for-fnos');
@@ -215,20 +216,14 @@ test('旧安装迁移到应用共享目录并修复 worker 主组和初始错误
   await writeFile(path.join(root, 'versions/1.30.5/nginx'), 'trusted binary');
   await writeFile(path.join(root, 'logs/error.log'), 'old log\n');
   await writeFile(path.join(root, 'nginx.conf'), `user nobody;\npid ${root}/nginx.pid;\nerror_log ${root}/logs/error.log warn;\nworker_processes 2;\nevents { worker_connections 512; }\nhttp { include ${root}/sites/*.conf; }\n`);
-  const calls = [];
   await mkdir(shareRoot, { recursive: true, mode: 0o700 });
   await chmod(shareRoot, 0o700);
-  const owners = [];
-  const manager = new NginxManager(root, { shareRoot, workerUser: 'nginx_for_fnos', platform: 'linux', uid: 0, setOwner: async (...args) => owners.push(args), run: async (binary, args) => {
-    calls.push({ binary, args });
-    if (binary === 'id') return args[0] === '-gn' ? args[1] === 'nobody' ? 'nogroup' : '976' : '976';
-    return 'nginx: configuration file test is successful';
-  } });
+  const manager = new NginxManager(root, { shareRoot, run: async () => 'nginx: configuration file test is successful' });
   await manager.init();
   assert.equal(await readFile(path.join(shareRoot, 'sites/example.conf'), 'utf8'), 'server { listen 8080; }');
   assert.equal(await readFile(path.join(shareRoot, 'logs/error.log'), 'utf8'), 'old log\n');
   const config = await readFile(manager.config, 'utf8');
-  assert.match(config, /^user nginx_for_fnos nogroup;/);
+  assert.doesNotMatch(config, /^user /);
   assert.match(config, /worker_processes 2;/);
   assert.ok(config.includes(`include ${shareRoot}/sites/*.conf;`));
   assert.ok(config.includes(`error_log ${shareRoot}/logs/error.log`));
@@ -236,12 +231,7 @@ test('旧安装迁移到应用共享目录并修复 worker 主组和初始错误
   assert.ok(config.includes(`proxy_temp_path ${shareRoot}/temp/proxy;`));
   await manager.prepareConfig();
   assert.equal((await readFile(manager.config, 'utf8')).match(/client_body_temp_path/g)?.length, 1);
-  assert.equal((await stat(shareRoot)).mode & 0o001, 0o001);
-  assert.equal(owners.length, 5);
-  assert.deepEqual(owners[0].slice(1), [976, 976]);
-  assert.equal(calls[0].binary, 'id');
-  assert.deepEqual(calls[0].args, ['-gn', 'nginx_for_fnos']);
-  assert.deepEqual(calls[1].args, ['-gn', 'nobody']);
+  assert.equal((await stat(shareRoot)).mode & 0o777, 0o700);
   assert.deepEqual(manager.args().slice(2, 4), ['-e', path.join(shareRoot, 'logs/error.log')]);
   await manager.ensureRuntime('1.30.5');
   assert.equal(await readFile(manager.binary('1.30.5'), 'utf8'), 'trusted binary');
@@ -256,8 +246,8 @@ test('共享目录已有文件时迁移不会覆盖，手工主配置参与站�
   const shareRoot = path.join(parent, '@appshare/nginx-for-fnos');
   await mkdir(path.join(root, 'sites'), { recursive: true });
   await mkdir(path.join(shareRoot, 'sites'), { recursive: true });
-  await writeFile(path.join(root, 'sites/example.conf'), 'server { listen 1001; }');
-  await writeFile(path.join(shareRoot, 'sites/example.conf'), 'server { listen 1002; }');
+  await writeFile(path.join(root, 'sites/example.conf'), 'server { listen 8081; }');
+  await writeFile(path.join(shareRoot, 'sites/example.conf'), 'server { listen 8082; }');
   const manager = new NginxManager(root, { shareRoot, run: async (_binary, args) => {
     if (args.includes('-t')) {
       const config = await readFile(args[args.indexOf('-c') + 1], 'utf8');
@@ -267,12 +257,12 @@ test('共享目录已有文件时迁移不会覆盖，手工主配置参与站�
     return 'ok';
   } });
   await manager.init();
-  assert.equal(await readFile(path.join(shareRoot, 'sites/example.conf'), 'utf8'), 'server { listen 1002; }');
-  assert.equal(await readFile(path.join(root, 'sites/example.conf'), 'utf8'), 'server { listen 1001; }');
+  assert.equal(await readFile(path.join(shareRoot, 'sites/example.conf'), 'utf8'), 'server { listen 8082; }');
+  assert.equal(await readFile(path.join(root, 'sites/example.conf'), 'utf8'), 'server { listen 8081; }');
   await writeFile(manager.config, (await readFile(manager.config, 'utf8')).replace('worker_processes auto;', 'worker_processes 3;'));
   manager.state.activeVersion = '1.30.5';
-  await manager.saveSite('new.conf', 'server { listen 1003; }');
+  await manager.saveSite('new.conf', 'server { listen 8083; }');
   assert.match(await readFile(manager.config, 'utf8'), /worker_processes 3;/);
   await writeFile(manager.config, (await readFile(manager.config, 'utf8')).replace(`include ${shareRoot}/sites/*.conf;`, `# include ${shareRoot}/sites/*.conf;`));
-  await assert.rejects(manager.saveSite('another.conf', 'server { listen 1004; }'), /须保留/);
+  await assert.rejects(manager.saveSite('another.conf', 'server { listen 8084; }'), /须保留/);
 });

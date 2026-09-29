@@ -61,6 +61,6 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
   server.headersTimeout = 10000; server.requestTimeout = 30000;
   if (socket) await rm(socket, { force: true });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket || { host: '127.0.0.1', port: devPort }, resolve); });
-  if (socket) await chmod(socket, 0o600);
+  if (socket) await chmod(socket, 0o660);
   return { server, async close() { await new Promise(resolve => server.close(resolve)); if (socket) await rm(socket, { force: true }); } };
 }

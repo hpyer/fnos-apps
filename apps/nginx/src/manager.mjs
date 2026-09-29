@@ -86,11 +86,9 @@ async function fileHash(file) { return createHash('sha256').update(await readFil
 async function openDirectory(file) { return open(file, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); }
 
 export class NginxManager {
-  constructor(root, { shareRoot = root, workerUser = 'nginx_for_fnos', platform = process.platform, arch = process.arch, run = command, repository, uid = process.getuid?.(), setOwner = (directory, userId, groupId) => directory.chown(userId, groupId) } = {}) {
-    if (!/^[a-z_][a-z0-9_-]*$/.test(workerUser)) throw Error('Nginx worker 用户名无效');
-    this.root = root; this.workerUser = workerUser;
+  constructor(root, { shareRoot = root, platform = process.platform, arch = process.arch, run = command, repository } = {}) {
+    this.root = root;
     this.shareRoot = shareRoot; this.platform = platform; this.arch = arch; this.run = run; this.repository = repository || new OfficialRepository({ platform, arch });
-    this.rootMode = platform === 'linux' && uid === 0; this.workerGroup = ''; this.workerIds = null; this.setOwner = setOwner;
     this.sites = path.join(shareRoot, 'sites'); this.versions = path.join(shareRoot, 'versions');
     this.runtimeVersions = path.join(root, 'runtime-versions');
     this.logs = path.join(shareRoot, 'logs'); this.temp = path.join(shareRoot, 'temp'); this.config = path.join(shareRoot, 'nginx.conf');
@@ -101,20 +99,6 @@ export class NginxManager {
   async init() {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     await mkdir(this.shareRoot, { recursive: true, mode: 0o755 });
-    if (this.rootMode) {
-      const primaryGroup = (await this.run('id', ['-gn', this.workerUser])).trim();
-      // fnOS package accounts can have a numeric primary GID without a group
-      // name. Nginx resolves the group argument with getgrnam(), so use the
-      // named low-privilege group already present on the NAS in that case.
-      this.workerGroup = /^[a-z_][a-z0-9_-]*$/.test(primaryGroup)
-        ? primaryGroup : (await this.run('id', ['-gn', 'nobody'])).trim();
-      if (!/^[a-z_][a-z0-9_-]*$/.test(this.workerGroup)) throw Error(`无法确定 Nginx worker ${this.workerUser} 可用的组名`);
-      const uidText = (await this.run('id', ['-u', this.workerUser])).trim();
-      const gidText = (await this.run('id', ['-g', this.workerUser])).trim();
-      const workerUid = Number(uidText), workerGid = Number(gidText);
-      if (!/^\d+$/.test(uidText) || !/^\d+$/.test(gidText) || !Number.isSafeInteger(workerUid) || !Number.isSafeInteger(workerGid)) throw Error(`无法确定 Nginx worker ${this.workerUser} 的 UID/GID`);
-      this.workerIds = [workerUid, workerGid];
-    }
     await mkdir(this.runtimeVersions, { recursive: true, mode: 0o700 });
     try { this.state = { ...this.state, ...JSON.parse(await readFile(this.stateFile, 'utf8')) }; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (!this.state.trustedVersions || typeof this.state.trustedVersions !== 'object' || Array.isArray(this.state.trustedVersions)) this.state.trustedVersions = {};
@@ -151,21 +135,11 @@ export class NginxManager {
   tempDirectives() { return TEMP_PATHS.map(([directive, name]) => `  ${directive} ${path.join(this.temp, name)};`); }
   async ensureTempDirectories() {
     await mkdir(this.temp, { recursive: true, mode: 0o711 });
-    if (this.rootMode) {
-      for (const parent of [this.shareRoot, this.temp]) {
-        const directory = await openDirectory(parent);
-        try {
-          const { mode } = await directory.stat();
-          if (!(mode & 0o001)) await directory.chmod((mode & 0o7777) | 0o001);
-        } finally { await directory.close(); }
-      }
-    }
     for (const [, name] of TEMP_PATHS) {
       const location = path.join(this.temp, name);
       await mkdir(location, { recursive: true, mode: 0o700 });
       const directory = await openDirectory(location);
       try {
-        if (this.workerIds) await this.setOwner(directory, ...this.workerIds);
         await directory.chmod(0o700);
       } finally { await directory.close(); }
     }
@@ -179,10 +153,8 @@ export class NginxManager {
       updated = updated.replaceAll(`${this.root}/sites`, `${this.shareRoot}/sites`)
         .replaceAll(`${this.root}/logs`, `${this.shareRoot}/logs`);
     }
-    if (this.rootMode) {
-      updated = updated.replace(/(^|\n)([ \t]*)user[ \t]+nobody(?:[ \t]+[a-z_][a-z0-9_-]*)?[ \t]*;/, (_match, lineStart, indent) => `${lineStart}${indent}user ${this.workerUser} ${this.workerGroup};`);
-      updated = updated.replace(`user ${this.workerUser};`, `user ${this.workerUser} ${this.workerGroup};`);
-    }
+    // A non-root master cannot change worker identities; discard the old generated directive.
+    updated = updated.replace(/^[ \t]*user[ \t]+[a-z_][a-z0-9_-]*(?:[ \t]+[a-z_][a-z0-9_-]*)?[ \t]*;[ \t]*\r?\n/, '');
     const uncommented = updated.split('\n').map(line => line.split('#', 1)[0]).join('\n');
     const missing = this.tempDirectives().filter(line => !new RegExp(`\\b${line.trim().split(' ', 1)[0]}\\s+`).test(uncommented));
     if (missing.length) {
@@ -195,8 +167,7 @@ export class NginxManager {
     if (updated !== current) await atomic(this.config, updated);
   }
   async writeConfig(file, siteDirectory) {
-    const user = this.rootMode ? `user ${this.workerUser} ${this.workerGroup};\n` : '';
-    const conf = `${user}pid ${this.pidFile};\nerror_log ${path.join(this.logs, 'error.log')} warn;\nworker_processes auto;\nevents { worker_connections 1024; }\nhttp {\n  access_log ${path.join(this.logs, 'access.log')};\n${this.tempDirectives().join('\n')}\n  include ${siteDirectory}/*.conf;\n}\n`;
+    const conf = `pid ${this.pidFile};\nerror_log ${path.join(this.logs, 'error.log')} warn;\nworker_processes auto;\nevents { worker_connections 1024; }\nhttp {\n  access_log ${path.join(this.logs, 'access.log')};\n${this.tempDirectives().join('\n')}\n  include ${siteDirectory}/*.conf;\n}\n`;
     await atomic(file, conf);
   }
   async candidateConfig(siteDirectory, current) {

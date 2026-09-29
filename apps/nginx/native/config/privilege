@@ -1,1 +1,1 @@
-{"defaults":{"run-as":"root"},"username":"nginx_for_fnos","groupname":"nginx_for_fnos"}
+{"defaults":{"run-as":"package"},"username":"nginx_for_fnos","groupname":"nginx_for_fnos"}
