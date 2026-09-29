@@ -14,3 +14,23 @@ test('管理 Unix Socket 只允许 root 连接，避免 Nginx worker 伪造网�
     assert.equal((await stat(socket)).mode & 0o777, 0o600);
   } finally { await service.close(); }
 });
+
+test('管理员可读取主配置并提交候选内容', async t => {
+  let saved;
+  const manager = {
+    readConfig: async () => 'events { worker_connections 1024; }\n',
+    saveConfig: async source => { saved = source; return { ok: true }; }
+  };
+  const service = await serve(manager, { assets: new URL('../src/web/', import.meta.url), devPort: 0 });
+  t.after(() => service.close());
+  const base = `http://127.0.0.1:${service.server.address().port}/app/nginx-for-fnos/api/config`;
+  const read = await fetch(base);
+  assert.equal(read.status, 200);
+  assert.deepEqual(await read.json(), { source: 'events { worker_connections 1024; }\n' });
+  const denied = await fetch(`${base}/save`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: 'new' }) });
+  assert.equal(denied.status, 403);
+  const write = await fetch(`${base}/save`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify({ source: 'new' }) });
+  assert.equal(write.status, 200);
+  assert.deepEqual(await write.json(), { ok: true });
+  assert.equal(saved, 'new');
+});

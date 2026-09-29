@@ -30,6 +30,7 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
         return response.end(files.get(asset));
       }
       if (request.method === 'GET' && url.pathname === `${PREFIX}/api/status`) return json(response, 200, await manager.status());
+      if (request.method === 'GET' && url.pathname === `${PREFIX}/api/config`) return json(response, 200, { source: await manager.readConfig() });
       if (request.method === 'GET' && url.pathname === `${PREFIX}/api/site`) return json(response, 200, { name: url.searchParams.get('name'), source: await manager.listSite(url.searchParams.get('name')) });
       if (request.method !== 'POST' || !url.pathname.startsWith(`${PREFIX}/api/`)) return json(response, 404, { error: '未找到接口' });
       if (request.headers['x-fnos-request'] !== '1') return json(response, 403, { error: '请求校验失败' });
@@ -38,6 +39,7 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
       const input = await body(request);
       let result;
       switch (action) {
+        case 'config/save': result = await manager.saveConfig(input.source); break;
         case 'site/save': result = await manager.saveSite(input.name, input.source); break;
         case 'site/delete': result = await manager.deleteSite(input.name); break;
         case 'reload': result = await manager.exclusive(async () => { await manager.reload(); return { ok: true }; }); break;

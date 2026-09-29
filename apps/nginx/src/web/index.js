@@ -4,8 +4,7 @@ const BASE = '/app/nginx-for-fnos';
 const $ = id => document.getElementById(id);
 let selected = '', status = null, latest = null;
 function notify(content, type = 'info', duration = 3000) {
-  const dialog = $('site-dialog');
-  return toast({ content, type, duration, container: dialog.open ? dialog : document.body });
+  return toast({ content, type, duration, container: document.querySelector('dialog[open]') || document.body });
 }
 async function api(action, input = {}) {
   const response = await fetch(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) });
@@ -19,13 +18,13 @@ async function get(action, query = '') {
   if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
   return data;
 }
-async function run(task, success, closeDialogOnSuccess = false) {
+async function run(task, success, closeDialogId = '') {
   const pending = notify('正在处理…', 'info', 0);
   try {
     const result = await task();
     await refresh();
     pending.close();
-    if (closeDialogOnSuccess) $('site-dialog').close();
+    if (closeDialogId) $(closeDialogId).close();
     notify(result?.message || success, 'success');
     return result;
   } catch (error) {
@@ -92,12 +91,23 @@ $('site-name').addEventListener('change', () => { $('site-name').value = siteBas
 $('save-site').addEventListener('click', async () => {
   const baseName = siteBaseName($('site-name').value);
   const name = selected || (baseName ? `${baseName}.conf` : '');
-  await run(() => api('site/save', { name, source: $('site-source').value }), '配置已校验并保存', true);
+  await run(() => api('site/save', { name, source: $('site-source').value }), '配置已校验并保存', 'site-dialog');
 });
 $('delete-site').addEventListener('click', async () => {
   if (!selected || !confirm(`删除 ${selected}？`)) return;
-  await run(() => api('site/delete', { name: selected }), '配置已删除', true);
+  await run(() => api('site/delete', { name: selected }), '配置已删除', 'site-dialog');
 });
+$('edit-config').addEventListener('click', async () => {
+  try {
+    const data = await get('config');
+    $('config-source').value = data.source;
+    $('config-dialog').showModal();
+    $('config-source').focus();
+  } catch (error) { notify(error.message, 'error'); }
+});
+$('close-config').addEventListener('click', () => $('config-dialog').close());
+$('cancel-config').addEventListener('click', () => $('config-dialog').close());
+$('save-config').addEventListener('click', () => run(() => api('config/save', { source: $('config-source').value }), '主配置已校验并保存', 'config-dialog'));
 $('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
 $('stop').addEventListener('click', () => run(() => api('service/stop'), 'Nginx 已停止'));
 $('reload').addEventListener('click', () => run(() => api('reload'), '配置已校验并发送平滑重载'));

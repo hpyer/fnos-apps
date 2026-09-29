@@ -199,8 +199,8 @@ export class NginxManager {
     const conf = `${user}pid ${this.pidFile};\nerror_log ${path.join(this.logs, 'error.log')} warn;\nworker_processes auto;\nevents { worker_connections 1024; }\nhttp {\n  access_log ${path.join(this.logs, 'access.log')};\n${this.tempDirectives().join('\n')}\n  include ${siteDirectory}/*.conf;\n}\n`;
     await atomic(file, conf);
   }
-  async candidateConfig(siteDirectory) {
-    const current = await readFile(this.config, 'utf8');
+  async candidateConfig(siteDirectory, current) {
+    if (current === undefined) current = await readFile(this.config, 'utf8');
     const managedInclude = `include ${this.sites}/*.conf;`;
     const lines = current.split('\n');
     const index = lines.findIndex(line => line.split('#', 1)[0].includes(managedInclude));
@@ -260,6 +260,23 @@ export class NginxManager {
     this.state.lastResult = `已发送平滑重载信号：${new Date().toISOString()}`;
     await this.saveState();
   }
+  async readConfig() { return readFile(this.config, 'utf8'); }
+  async saveConfig(source) { return this.exclusive(async () => {
+    if (typeof source !== 'string' || !source.trim() || Buffer.byteLength(source) > 262144) throw Error('主配置内容为空或超过 256 KiB');
+    const previous = await this.readConfig();
+    const candidate = path.join(this.root, `candidate-${randomUUID()}`);
+    await mkdir(candidate, { mode: 0o700 });
+    try {
+      const candidateFile = path.join(candidate, 'nginx.conf');
+      await atomic(candidateFile, await this.candidateConfig(this.sites, source));
+      await this.validate(candidateFile);
+      await atomic(this.config, source);
+      try { if (this.child) await this.reload(); }
+      catch (error) { await atomic(this.config, previous); throw error; }
+      if (!this.child) { this.state.lastResult = '已保存主配置，Nginx 未运行'; await this.saveState(); }
+      return { ok: true };
+    } finally { await rm(candidate, { recursive: true, force: true }); }
+  }); }
   async listSite(name) { return readFile(path.join(this.sites, siteName(name)), 'utf8'); }
   async saveSite(name, source) { return this.exclusive(async () => {
     siteName(name); serverOnly(source); const candidate = path.join(this.root, `candidate-${randomUUID()}`);

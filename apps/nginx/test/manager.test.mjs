@@ -34,6 +34,46 @@ test('候选配置验证失败不会覆盖线上站点文件', async t => {
   assert.equal(await manager.listSite('example.conf'), 'server { listen 8080; }');
 });
 
+test('主配置先校验候选文件，失败保留原配置，重载失败回滚', async t => {
+  const manager = await fixture(t);
+  const original = await manager.readConfig();
+  const edited = original.replace('worker_processes auto;', 'worker_processes 2;');
+  let validated = 0;
+  manager.run = async (_binary, args) => {
+    const file = args[args.indexOf('-c') + 1];
+    const candidate = await readFile(file, 'utf8');
+    assert.equal(await manager.readConfig(), original);
+    assert.notEqual(file, manager.config);
+    validated++;
+    if (candidate.includes('bad_directive;')) throw Error('nginx: 配置验证失败');
+    return 'ok';
+  };
+  await assert.rejects(manager.saveConfig(edited.replace(`include ${manager.sites}/*.conf;`, '')), /须保留/);
+  await assert.rejects(manager.saveConfig(edited.replace('worker_processes 2;', 'bad_directive;')), /配置验证失败/);
+  assert.equal(await manager.readConfig(), original);
+  assert.equal(validated, 1);
+
+  manager.child = { pid: process.pid };
+  manager.reload = async () => { throw Error('重载失败'); };
+  await assert.rejects(manager.saveConfig(edited), /重载失败/);
+  assert.equal(await manager.readConfig(), original);
+  manager.child = null;
+  assert.deepEqual(await manager.saveConfig(edited), { ok: true });
+  assert.equal(await manager.readConfig(), edited);
+  assert.match(manager.state.lastResult, /已保存主配置/);
+
+  const updated = edited.replace('worker_processes 2;', 'worker_processes 3;');
+  manager.run = async (_binary, args) => {
+    assert.equal(await readFile(args[args.indexOf('-c') + 1], 'utf8'), updated);
+    return 'ok';
+  };
+  let reloads = 0;
+  manager.child = { pid: process.pid };
+  manager.reload = async () => { reloads++; assert.equal(await manager.readConfig(), updated); };
+  await manager.saveConfig(updated);
+  assert.equal(reloads, 1);
+});
+
 test('候选站点配置使用可写的应用临时目录，清理后校验会重新创建', async t => {
   const manager = await fixture(t);
   await rm(manager.temp, { recursive: true, force: true });
