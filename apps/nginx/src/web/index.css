@@ -28,4 +28,18 @@ dialog[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:min(
 .site-name-field span{align-self:stretch;display:flex;align-items:center;padding:0 10px;border-left:1px solid #e0e9e2;background:#f6f9f7;color:#496457;font:12px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
 .dialog-body textarea{height:100%;min-height:0;resize:none;overflow:auto}
 .dialog-foot{flex-wrap:wrap;justify-content:flex-end;padding:10px 18px;min-height:54px}
-@media(max-width:580px){.service-controls{width:100%;flex-wrap:wrap;gap:9px}dialog[open]{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}.dialog-head{padding:10px 12px}.dialog-body{padding:10px 12px}.dialog-foot{padding:8px 12px}}
+@media(max-width:580px){
+  .topbar{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:8px;row-gap:10px}
+  .service-controls{display:contents}
+  .service-summary{grid-column:1/-1;flex-wrap:nowrap;gap:10px}
+  .status{min-width:0}
+  #running{flex:none;white-space:nowrap}
+  .service-actions{grid-column:1;width:auto;flex-wrap:nowrap;gap:8px}
+  .reload-actions{grid-column:2;min-width:0;justify-content:flex-start}
+  .reload-actions button{min-height:38px;padding-inline:8px}
+  .service-actions button{min-height:38px}
+  dialog[open]{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}
+  .dialog-head{padding:10px 12px}
+  .dialog-body{padding:10px 12px}
+  .dialog-foot{padding:8px 12px}
+}
