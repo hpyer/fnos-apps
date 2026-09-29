@@ -5,7 +5,7 @@ import { access, chmod, copyFile, lstat, mkdir, open, readFile, readdir, rename,
 import path from 'node:path';
 import { OfficialRepository, channelName } from './official.mjs';
 
-const DEFAULTS = { notificationEnabled: false, notificationPath: '', intervalMinutes: 30, lastHandled: '', lastResult: '', channel: 'stable' };
+const DEFAULTS = { notificationEnabled: false, notificationPath: '', intervalMinutes: 30, lastHandled: '', lastHandledAt: '', lastResult: '', channel: 'stable' };
 const SITE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}\.conf$/;
 const VERSION = /^[0-9][a-zA-Z0-9._-]{0,39}$/;
 const TEMP_PATHS = [
@@ -205,7 +205,7 @@ export class NginxManager {
     return { running: !!this.child && await processAlive(this.child.pid), activeVersion: this.state.activeVersion, versions: versions.filter(VERSION.test.bind(VERSION)).sort(), channel: this.state.channel,
       sites: siteFiles.filter(x => SITE.test(x)).sort(),
       disabledSites: siteFiles.filter(x => x.endsWith('.disabled') && SITE.test(x.slice(0, -9))).map(x => x.slice(0, -9)).sort(),
-      settings: { notificationEnabled: this.state.notificationEnabled, notificationPath: this.state.notificationPath, intervalMinutes: this.state.intervalMinutes }, lastHandled: this.state.lastHandled, lastResult: this.state.lastResult };
+      settings: { notificationEnabled: this.state.notificationEnabled, notificationPath: this.state.notificationPath, intervalMinutes: this.state.intervalMinutes }, lastHandled: this.state.lastHandled, lastHandledAt: this.state.lastHandledAt, lastResult: this.state.lastResult };
   }
   async start() {
     if (this.child && await processAlive(this.child.pid)) return;
@@ -441,7 +441,9 @@ export class NginxManager {
     if (!token || token.startsWith('test:') || token === this.state.lastHandled) return { skipped: true };
     if (!/^\d{8}T\d{6}Z-\d{1,12}$/.test(token)) throw Error('通知内容须为时间戳和进程号');
     await this.reload();
-    this.state.lastHandled = token; await this.saveState();
+    this.state.lastHandled = token;
+    this.state.lastHandledAt = new Date().toISOString();
+    await this.saveState();
     return { reloaded: true };
   }); }
   async close() { if (this.timer) clearInterval(this.timer); await this.stop(); }

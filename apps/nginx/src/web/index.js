@@ -84,7 +84,7 @@ async function refresh() {
   $('site-list').replaceChildren(...(siteRows.length ? siteRows : [Object.assign(document.createElement('div'), { className: 'empty', textContent: '暂无站点配置，点击右上角新增站点' })]));
   $('version-count').textContent = status.versions.length;
   $('version-list').replaceChildren(...(status.versions.length ? status.versions.map(versionItem) : [Object.assign(document.createElement('span'), { className: 'muted', textContent: '尚未安装版本' })]));
-  $('notify-state').textContent = `上次处理：${status.lastHandled || '无'} · ${status.lastResult || '无操作记录'}`;
+  $('notify-state').textContent = `上次处理时间：${status.lastHandledAt ? new Date(status.lastHandledAt).toLocaleString('zh-CN', { hour12: false }) : '无记录'}`;
   if (latest && latest.channel === $('channel').value) latest.installed = status.versions.includes(latest.version);
   renderLatest();
 }

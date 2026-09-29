@@ -179,7 +179,17 @@ test('通知文件测试会创建文件且测试内容不触发重载', async t 
   assert.equal(existing.created, false);
   assert.equal(await readFile(file, 'utf8'), '20260928T120000Z-123\n');
   assert.deepEqual(await manager.checkNotification(), { reloaded: true });
+  const handledAt = manager.state.lastHandledAt;
+  assert.equal(manager.state.lastHandled, '20260928T120000Z-123');
+  assert.ok(Number.isFinite(Date.parse(handledAt)));
+  assert.equal((await manager.status()).lastHandledAt, handledAt);
   assert.deepEqual(await manager.checkNotification(), { skipped: true });
+  assert.equal(manager.state.lastHandledAt, handledAt);
+  await writeFile(file, '20260928T130000Z-123\n');
+  manager.reload = async () => { throw Error('reload failed'); };
+  await assert.rejects(manager.checkNotification(), /reload failed/);
+  assert.equal(manager.state.lastHandled, '20260928T120000Z-123');
+  assert.equal(manager.state.lastHandledAt, handledAt);
   assert.equal(reloads, 1);
 });
 
