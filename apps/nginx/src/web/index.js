@@ -122,8 +122,8 @@ $('close-config').addEventListener('click', () => $('config-dialog').close());
 $('cancel-config').addEventListener('click', () => $('config-dialog').close());
 $('save-config').addEventListener('click', () => run(() => api('config/save', { source: $('config-source').value }), '主配置已校验并保存', 'config-dialog'));
 $('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
-$('stop').addEventListener('click', () => run(() => api('service/stop'), 'Nginx 已停止'));
-$('restart').addEventListener('click', () => run(() => api('service/restart'), 'Nginx 已重启'));
+$('stop').addEventListener('click', () => { if (confirm('确定停止 Nginx 吗？')) run(() => api('service/stop'), 'Nginx 已停止'); });
+$('restart').addEventListener('click', () => { if (confirm('确定重启 Nginx 吗？')) run(() => api('service/restart'), 'Nginx 已重启'); });
 $('reload').addEventListener('click', () => run(() => api('reload'), '配置已校验并发送平滑重载'));
 $('channel').addEventListener('change', () => { latest = null; renderLatest(); checkVersion(); });
 async function checkVersion() {

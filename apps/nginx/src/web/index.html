@@ -9,8 +9,10 @@
 </head>
 <body>
   <header class="topbar" aria-label="服务控制">
-    <div class="actions service-actions"><button id="start" type="button">启动</button><button id="stop" type="button" hidden>停止</button><button id="restart" type="button" hidden>重启</button></div>
-    <div class="service-summary"><strong>运行状态</strong><div class="status"><span id="dot" class="dot"></span><span id="running">读取中</span><span class="divider"></span><span id="active">未选择版本</span></div></div>
+    <div class="service-controls">
+      <div class="service-summary"><strong>运行状态</strong><div class="status"><span id="dot" class="dot"></span><span id="running">读取中</span><span class="divider"></span><span id="active">未选择版本</span></div></div>
+      <div class="actions service-actions"><button id="start" type="button">启动</button><button id="stop" type="button" hidden>停止</button><button id="restart" type="button" hidden>重启</button></div>
+    </div>
     <div class="actions reload-actions"><button id="reload" type="button" class="primary">校验并重载配置</button></div>
   </header>
   <main>
