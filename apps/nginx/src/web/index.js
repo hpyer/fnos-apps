@@ -1,0 +1,109 @@
+const BASE = '/app/nginx-for-fnos';
+const $ = id => document.getElementById(id);
+let selected = '', status = null, latest = null;
+function message(value, error = false) { $('message').textContent = value; $('message').classList.toggle('error', error); }
+async function api(action, input = {}) {
+  const response = await fetch(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) });
+  const data = await response.json();
+  if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
+  return data;
+}
+async function get(action, query = '') {
+  const response = await fetch(`${BASE}/api/${action}${query}`, { cache: 'no-store' });
+  const data = await response.json();
+  if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
+  return data;
+}
+async function run(task, success) {
+  try { message('正在处理…'); const result = await task(); message(result?.message || success); await refresh(); return result; }
+  catch (error) { message(error.message, true); return null; }
+}
+function renderLatest() {
+  const channel = $('channel').value;
+  const matched = latest && latest.channel === channel;
+  $('latest-version').textContent = matched ? latest.version : '尚未检查';
+  $('latest-detail').textContent = matched ? `${latest.distribution} · ${latest.installed ? '已下载' : latest.updateAvailable ? '有可用更新' : '当前已是较新版本'}` : '点击检查更新获取官方版本';
+  $('install-version').disabled = !matched || latest.installed;
+  $('install-version').textContent = matched && latest.installed ? '已安装' : '下载并安装';
+}
+function siteItem(name) {
+  const row = document.createElement('div'); row.className = 'site-item';
+  const label = document.createElement('span'); label.className = 'site-name'; label.textContent = name; label.title = name;
+  const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '编辑'; edit.setAttribute('aria-label', `编辑 ${name}`);
+  edit.addEventListener('click', () => openSite(name)); row.append(label, edit); return row;
+}
+function versionItem(version) {
+  const row = document.createElement('div'); row.className = 'version-item';
+  const label = document.createElement('span'); const strong = document.createElement('strong'); strong.textContent = version; label.append(strong);
+  if (version === status.activeVersion) { const current = document.createElement('em'); current.textContent = '正在使用'; label.append(current); }
+  const controls = document.createElement('div'); controls.className = 'actions';
+  if (version !== status.activeVersion) {
+    const activate = document.createElement('button'); activate.type = 'button'; activate.textContent = '切换'; activate.addEventListener('click', () => run(() => api('version/activate', { version }), '版本已切换'));
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = '删除'; remove.addEventListener('click', () => { if (confirm(`删除版本 ${version}？`)) run(() => api('version/remove', { version }), '版本已删除'); });
+    controls.append(activate, remove);
+  }
+  row.append(label, controls); return row;
+}
+async function refresh() {
+  status = await get('status');
+  $('running').textContent = status.running ? '运行中' : '已停止';
+  $('dot').classList.toggle('on', status.running);
+  $('active').textContent = status.activeVersion ? `Nginx ${status.activeVersion}` : '未选择版本';
+  $('start').disabled = status.running || !status.activeVersion;
+  $('stop').disabled = !status.running;
+  $('reload').disabled = !status.running;
+  $('site-count').textContent = status.sites.length;
+  $('site-list').replaceChildren(...(status.sites.length ? status.sites.map(siteItem) : [Object.assign(document.createElement('div'), { className: 'empty', textContent: '暂无站点配置，点击右上角新增站点' })]));
+  $('version-count').textContent = status.versions.length;
+  $('version-list').replaceChildren(...(status.versions.length ? status.versions.map(versionItem) : [Object.assign(document.createElement('span'), { className: 'muted', textContent: '尚未安装版本' })]));
+  $('notify-state').textContent = `上次处理：${status.lastHandled || '无'} · ${status.lastResult || '无操作记录'}`;
+  if (latest && latest.channel === $('channel').value) latest.installed = status.versions.includes(latest.version);
+  renderLatest();
+}
+function showDialog() { $('site-error').hidden = true; $('site-error').textContent = ''; $('site-dialog').showModal(); $('site-name').focus(); }
+function siteBaseName(value) { return value.trim().replace(/\.conf$/i, ''); }
+async function openSite(name) {
+  try { const data = await get('site', `?name=${encodeURIComponent(name)}`); selected = name; $('dialog-title').textContent = `编辑 ${name}`; $('site-name').value = siteBaseName(name); $('site-name').readOnly = true; $('site-source').value = data.source; $('delete-site').hidden = false; showDialog(); }
+  catch (error) { message(error.message, true); }
+}
+$('new-site').addEventListener('click', () => {
+  selected = ''; $('dialog-title').textContent = '新增站点'; $('site-name').value = ''; $('site-name').readOnly = false; $('delete-site').hidden = true;
+  $('site-source').value = 'server {\n    listen 80;\n    server_name example.com;\n\n    location / {\n        proxy_pass http://127.0.0.1:8080;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n    }\n}\n'; showDialog();
+});
+$('close-dialog').addEventListener('click', () => $('site-dialog').close());
+$('cancel-dialog').addEventListener('click', () => $('site-dialog').close());
+$('site-name').addEventListener('change', () => { $('site-name').value = siteBaseName($('site-name').value); });
+$('save-site').addEventListener('click', async () => {
+  const baseName = siteBaseName($('site-name').value);
+  const name = selected || (baseName ? `${baseName}.conf` : '');
+  const result = await run(() => api('site/save', { name, source: $('site-source').value }), '配置已校验并保存');
+  if (result) $('site-dialog').close();
+  else { $('site-error').textContent = $('message').textContent; $('site-error').hidden = false; }
+});
+$('delete-site').addEventListener('click', async () => {
+  if (!selected || !confirm(`删除 ${selected}？`)) return;
+  const result = await run(() => api('site/delete', { name: selected }), '配置已删除');
+  if (result) $('site-dialog').close();
+  else { $('site-error').textContent = $('message').textContent; $('site-error').hidden = false; }
+});
+$('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
+$('stop').addEventListener('click', () => run(() => api('service/stop'), 'Nginx 已停止'));
+$('reload').addEventListener('click', () => run(() => api('reload'), '配置已校验并发送平滑重载'));
+$('channel').addEventListener('change', () => { latest = null; renderLatest(); checkVersion(); });
+async function checkVersion() {
+  const channel = $('channel').value;
+  $('latest-version').textContent = '检查中…'; $('latest-detail').textContent = '正在连接 nginx.org'; $('install-version').disabled = true;
+  try { const result = await api('version/check', { channel }); if ($('channel').value === channel) { latest = result; renderLatest(); } }
+  catch (error) { if ($('channel').value === channel) { latest = null; $('latest-version').textContent = '无法检查'; $('latest-detail').textContent = error.message; } }
+}
+$('check-version').addEventListener('click', checkVersion);
+$('install-version').addEventListener('click', async () => {
+  const channel = $('channel').value;
+  const result = await run(() => api('version/install', { channel }), '官方版本已下载并安装，可在已安装版本中切换');
+  if (result) { document.querySelector('.installed').open = true; await checkVersion(); }
+});
+$('save-notify').addEventListener('click', () => run(() => api('notification/settings', { notificationEnabled: $('notify-enabled').checked, notificationPath: $('notify-path').value.trim(), intervalMinutes: Number($('notify-interval').value) }), '通知设置已保存'));
+$('test-path').addEventListener('click', () => run(() => api('notification/test', { path: $('notify-path').value.trim() }), '通知文件读写测试通过'));
+$('check-notify').addEventListener('click', () => run(() => api('notification/check'), '已检查通知文件'));
+try { await refresh(); $('channel').value = status.channel || 'stable'; $('notify-enabled').checked = status.settings.notificationEnabled; $('notify-path').value = status.settings.notificationPath; $('notify-interval').value = status.settings.intervalMinutes; renderLatest(); checkVersion(); }
+catch (error) { message(error.message, true); }

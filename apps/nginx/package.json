@@ -1,0 +1,11 @@
+{
+  "name": "@fnos/nginx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/main.mjs --dev",
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

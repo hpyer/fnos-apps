@@ -1,0 +1,1 @@
+{".url":{"nginx-for-fnos.Application":{"title":"Nginx for fnOS","icon":"images/nginx_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/nginx-for-fnos","gatewaySocket":"app.sock","url":"/app/nginx-for-fnos/","allUsers":false,"control":{"accessPerm":"readonly"}}}}
