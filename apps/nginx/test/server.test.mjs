@@ -34,3 +34,15 @@ test('管理员可读取主配置并提交候选内容', async t => {
   assert.deepEqual(await write.json(), { ok: true });
   assert.equal(saved, 'new');
 });
+
+test('管理员可切换站点状态', async t => {
+  let request;
+  const manager = { setSiteEnabled: async (name, enabled) => { request = { name, enabled }; return { ok: true, enabled }; } };
+  const service = await serve(manager, { assets: new URL('../src/web/', import.meta.url), devPort: 0 });
+  t.after(() => service.close());
+  const url = `http://127.0.0.1:${service.server.address().port}/app/nginx-for-fnos/api/site/enabled`;
+  const response = await fetch(url, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify({ name: 'example.conf', enabled: false }) });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, enabled: false });
+  assert.deepEqual(request, { name: 'example.conf', enabled: false });
+});

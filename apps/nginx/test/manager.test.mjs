@@ -34,6 +34,56 @@ test('候选配置验证失败不会覆盖线上站点文件', async t => {
   assert.equal(await manager.listSite('example.conf'), 'server { listen 8080; }');
 });
 
+test('站点可禁用、编辑并在候选配置校验通过后重新启用', async t => {
+  const manager = await fixture(t);
+  await manager.saveSite('beta.conf', 'server { listen 8082; }');
+  await manager.saveSite('alpha.conf', 'server { listen 8081; }');
+  assert.deepEqual((await manager.status()).sites, ['alpha.conf', 'beta.conf']);
+  assert.deepEqual((await manager.status()).disabledSites, []);
+
+  await manager.setSiteEnabled('alpha.conf', false);
+  assert.deepEqual((await manager.status()).sites, ['beta.conf']);
+  assert.deepEqual((await manager.status()).disabledSites, ['alpha.conf']);
+  await assert.rejects(readFile(path.join(manager.sites, 'alpha.conf'), 'utf8'), { code: 'ENOENT' });
+  assert.equal(await manager.listSite('alpha.conf'), 'server { listen 8081; }');
+  await manager.saveSite('alpha.conf', 'server { listen 8181; }');
+  assert.equal(await readFile(path.join(manager.sites, 'alpha.conf.disabled'), 'utf8'), 'server { listen 8181; }');
+  assert.deepEqual((await manager.status()).disabledSites, ['alpha.conf']);
+
+  manager.run = async (_binary, args) => {
+    const conf = await readFile(args[args.indexOf('-c') + 1], 'utf8');
+    const candidateSites = conf.match(/include ([^;]+)\/\*\.conf;/)?.[1];
+    assert.equal(await readFile(path.join(candidateSites, 'alpha.conf'), 'utf8'), 'server { listen 8181; }');
+    await assert.rejects(readFile(path.join(manager.sites, 'alpha.conf'), 'utf8'), { code: 'ENOENT' });
+    return 'ok';
+  };
+  await manager.setSiteEnabled('alpha.conf', true);
+  assert.deepEqual((await manager.status()).sites, ['alpha.conf', 'beta.conf']);
+  assert.deepEqual((await manager.status()).disabledSites, []);
+  await assert.rejects(readFile(path.join(manager.sites, 'alpha.conf.disabled'), 'utf8'), { code: 'ENOENT' });
+});
+
+test('站点状态切换失败会回滚，禁用站点可删除', async t => {
+  const manager = await fixture(t);
+  await manager.saveSite('example.conf', 'server { listen 8080; }');
+  manager.child = { pid: process.pid };
+  manager.reload = async () => { throw Error('重载失败'); };
+  await assert.rejects(manager.setSiteEnabled('example.conf', false), /重载失败/);
+  assert.deepEqual((await manager.status()).sites, ['example.conf']);
+
+  manager.child = null;
+  await manager.setSiteEnabled('example.conf', false);
+  manager.run = async () => { throw Error('配置验证失败'); };
+  await assert.rejects(manager.setSiteEnabled('example.conf', true), /配置验证失败/);
+  assert.deepEqual((await manager.status()).disabledSites, ['example.conf']);
+  manager.run = async () => 'ok';
+  manager.child = { pid: process.pid };
+  await assert.rejects(manager.setSiteEnabled('example.conf', true), /重载失败/);
+  assert.deepEqual((await manager.status()).disabledSites, ['example.conf']);
+  await manager.deleteSite('example.conf');
+  assert.deepEqual((await manager.status()).disabledSites, []);
+});
+
 test('主配置先校验候选文件，失败保留原配置，重载失败回滚', async t => {
   const manager = await fixture(t);
   const original = await manager.readConfig();

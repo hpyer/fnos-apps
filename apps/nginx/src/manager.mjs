@@ -230,7 +230,11 @@ export class NginxManager {
   async validate(conf = this.config, version) { await this.ensureTempDirectories(); return this.run(this.binary(version), [...this.args(conf), '-t']); }
   async status() {
     const versions = await readdir(this.versions);
-    return { running: !!this.child && await processAlive(this.child.pid), activeVersion: this.state.activeVersion, versions: versions.filter(VERSION.test.bind(VERSION)).sort(), channel: this.state.channel, sites: (await readdir(this.sites)).filter(x => SITE.test(x)).sort(), settings: { notificationEnabled: this.state.notificationEnabled, notificationPath: this.state.notificationPath, intervalMinutes: this.state.intervalMinutes }, lastHandled: this.state.lastHandled, lastResult: this.state.lastResult };
+    const siteFiles = await readdir(this.sites);
+    return { running: !!this.child && await processAlive(this.child.pid), activeVersion: this.state.activeVersion, versions: versions.filter(VERSION.test.bind(VERSION)).sort(), channel: this.state.channel,
+      sites: siteFiles.filter(x => SITE.test(x)).sort(),
+      disabledSites: siteFiles.filter(x => x.endsWith('.disabled') && SITE.test(x.slice(0, -9))).map(x => x.slice(0, -9)).sort(),
+      settings: { notificationEnabled: this.state.notificationEnabled, notificationPath: this.state.notificationPath, intervalMinutes: this.state.intervalMinutes }, lastHandled: this.state.lastHandled, lastResult: this.state.lastResult };
   }
   async start() {
     if (this.child && await processAlive(this.child.pid)) return;
@@ -277,34 +281,64 @@ export class NginxManager {
       return { ok: true };
     } finally { await rm(candidate, { recursive: true, force: true }); }
   }); }
-  async listSite(name) { return readFile(path.join(this.sites, siteName(name)), 'utf8'); }
-  async saveSite(name, source) { return this.exclusive(async () => {
-    siteName(name); serverOnly(source); const candidate = path.join(this.root, `candidate-${randomUUID()}`);
-    let previous = null;
-    try { previous = await this.listSite(name); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  async siteFiles(name) {
+    const active = path.join(this.sites, siteName(name)), inactive = `${active}.disabled`;
+    const enabled = await exists(active), disabled = await exists(inactive);
+    if (enabled && disabled) throw Error(`站点 ${name} 同时存在启用和禁用文件`);
+    return { active, inactive, enabled, disabled, current: enabled ? active : inactive };
+  }
+  async validateSiteCandidate(name, source) {
+    const candidate = path.join(this.root, `candidate-${randomUUID()}`);
     await mkdir(path.join(candidate, 'sites'), { recursive: true });
     try {
       for (const file of (await readdir(this.sites)).filter(x => SITE.test(x))) await copyFile(path.join(this.sites, file), path.join(candidate, 'sites', file));
       await atomic(path.join(candidate, 'sites', name), source);
       await atomic(path.join(candidate, 'nginx.conf'), await this.candidateConfig(path.join(candidate, 'sites')));
       await this.validate(path.join(candidate, 'nginx.conf'));
-      await atomic(path.join(this.sites, name), source);
-      try { if (this.child) await this.reload(); }
-      catch (error) {
-        if (previous === null) await rm(path.join(this.sites, name), { force: true });
-        else await atomic(path.join(this.sites, name), previous);
-        throw error;
-      }
-      if (!this.child) { this.state.lastResult = `已保存 ${name}，Nginx 未运行`; await this.saveState(); }
-      return { ok: true };
     } finally { await rm(candidate, { recursive: true, force: true }); }
+  }
+  async listSite(name) {
+    const files = await this.siteFiles(name);
+    if (!files.enabled && !files.disabled) throw Error('站点不存在');
+    return readFile(files.current, 'utf8');
+  }
+  async saveSite(name, source) { return this.exclusive(async () => {
+    siteName(name); serverOnly(source);
+    const files = await this.siteFiles(name);
+    const target = files.disabled ? files.inactive : files.active;
+    const previous = files.enabled || files.disabled ? await readFile(target, 'utf8') : null;
+    await this.validateSiteCandidate(name, source);
+    await atomic(target, source);
+    try { if (!files.disabled && this.child) await this.reload(); }
+    catch (error) {
+      if (previous === null) await rm(target, { force: true });
+      else await atomic(target, previous);
+      throw error;
+    }
+    if (!this.child) { this.state.lastResult = `已保存 ${name}，Nginx 未运行`; await this.saveState(); }
+    return { ok: true };
   }); }
   async deleteSite(name) { return this.exclusive(async () => {
-    siteName(name); const old = await this.listSite(name);
-    await rm(path.join(this.sites, name));
-    try { if (this.child) await this.reload(); }
-    catch (error) { await atomic(path.join(this.sites, name), old); throw error; }
+    const files = await this.siteFiles(name);
+    if (!files.enabled && !files.disabled) throw Error('站点不存在');
+    const old = await readFile(files.current, 'utf8');
+    await rm(files.current);
+    try { if (files.enabled && this.child) await this.reload(); }
+    catch (error) { await atomic(files.current, old); throw error; }
     return { ok: true };
+  }); }
+  async setSiteEnabled(name, enabled) { return this.exclusive(async () => {
+    if (typeof enabled !== 'boolean') throw Error('站点状态无效');
+    const files = await this.siteFiles(name);
+    if (!files.enabled && !files.disabled) throw Error('站点不存在');
+    if (files.enabled === enabled) return { ok: true, enabled };
+    if (enabled) await this.validateSiteCandidate(name, serverOnly(await readFile(files.inactive, 'utf8')));
+    const from = enabled ? files.inactive : files.active;
+    const to = enabled ? files.active : files.inactive;
+    await rename(from, to);
+    try { if (this.child) await this.reload(); }
+    catch (error) { await rename(to, from); throw error; }
+    return { ok: true, enabled };
   }); }
   async checkOfficial(channel = this.state.channel) {
     channelName(channel);

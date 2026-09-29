@@ -42,6 +42,7 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
         case 'config/save': result = await manager.saveConfig(input.source); break;
         case 'site/save': result = await manager.saveSite(input.name, input.source); break;
         case 'site/delete': result = await manager.deleteSite(input.name); break;
+        case 'site/enabled': result = await manager.setSiteEnabled(input.name, input.enabled); break;
         case 'reload': result = await manager.exclusive(async () => { await manager.reload(); return { ok: true }; }); break;
         case 'service/start': result = await manager.exclusive(async () => { await manager.start(); return { ok: true }; }); break;
         case 'service/stop': result = await manager.exclusive(async () => { await manager.stop(); return { ok: true }; }); break;

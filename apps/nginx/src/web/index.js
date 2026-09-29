@@ -41,11 +41,18 @@ function renderLatest() {
   $('install-version').disabled = !matched || latest.installed;
   $('install-version').textContent = matched && latest.installed ? '已安装' : '下载并安装';
 }
-function siteItem(name) {
-  const row = document.createElement('div'); row.className = 'site-item';
+function siteItem(name, enabled) {
+  const row = document.createElement('div'); row.className = enabled ? 'site-item' : 'site-item is-disabled';
+  const identity = document.createElement('div'); identity.className = 'site-identity';
   const label = document.createElement('span'); label.className = 'site-name'; label.textContent = name; label.title = name;
+  identity.append(label);
+  if (!enabled) { const state = document.createElement('span'); state.className = 'site-state'; state.textContent = '已禁用'; identity.append(state); }
+  const controls = document.createElement('div'); controls.className = 'actions';
   const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '编辑'; edit.setAttribute('aria-label', `编辑 ${name}`);
-  edit.addEventListener('click', () => openSite(name)); row.append(label, edit); return row;
+  edit.addEventListener('click', () => openSite(name));
+  const toggle = document.createElement('button'); toggle.type = 'button'; toggle.textContent = enabled ? '禁用' : '启用'; toggle.setAttribute('aria-label', `${toggle.textContent} ${name}`);
+  toggle.addEventListener('click', () => run(() => api('site/enabled', { name, enabled: !enabled }), `站点已${enabled ? '禁用' : '启用'}`));
+  controls.append(edit, toggle); row.append(identity, controls); return row;
 }
 function versionItem(version) {
   const row = document.createElement('div'); row.className = 'version-item';
@@ -67,8 +74,10 @@ async function refresh() {
   $('start').disabled = status.running || !status.activeVersion;
   $('stop').disabled = !status.running;
   $('reload').disabled = !status.running;
-  $('site-count').textContent = status.sites.length;
-  $('site-list').replaceChildren(...(status.sites.length ? status.sites.map(siteItem) : [Object.assign(document.createElement('div'), { className: 'empty', textContent: '暂无站点配置，点击右上角新增站点' })]));
+  const disabledSites = status.disabledSites || [];
+  const siteRows = [...status.sites.map(name => siteItem(name, true)), ...disabledSites.map(name => siteItem(name, false))];
+  $('site-count').textContent = siteRows.length;
+  $('site-list').replaceChildren(...(siteRows.length ? siteRows : [Object.assign(document.createElement('div'), { className: 'empty', textContent: '暂无站点配置，点击右上角新增站点' })]));
   $('version-count').textContent = status.versions.length;
   $('version-list').replaceChildren(...(status.versions.length ? status.versions.map(versionItem) : [Object.assign(document.createElement('span'), { className: 'muted', textContent: '尚未安装版本' })]));
   $('notify-state').textContent = `上次处理：${status.lastHandled || '无'} · ${status.lastResult || '无操作记录'}`;
