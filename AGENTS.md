@@ -1,6 +1,8 @@
 # 项目开发约束
 
 - 使用 pnpm workspace 管理应用。每个应用位于 `apps/<slug>`，原生 fnOS 包位于 `apps/<slug>/native`。
+- fnOS 应用窗口已显示应用图标和标题，应用主体界面不要再重复添加应用图标或应用名称；功能区可保留必要的功能标题。
+- 开发新应用功能时，优先复用 `packages/*` 中已有的公共能力；构建时须将所用公共包的运行代码和资源打入该应用的 FPK，确保安装后不依赖 workspace 或其他应用即可独立使用。
 - 根目录维护通用脚本、CI/CD 和 workspace 文档；应用的功能说明、架构、验收和运行文档放在各自的 `apps/<slug>/` 目录。
 - 执行 `dev`、`build`、`pack`、`check`、`release` 等通用命令时必须显式传入应用标识，例如 `pnpm run build <slug>`；不得默认选择某个应用。
 - 应用构建输出写入 `dist/<slug>`，FPK 通过 `pnpm run pack <slug>` 生成。打包前应保证应用版本、manifest 与发布元数据一致。
