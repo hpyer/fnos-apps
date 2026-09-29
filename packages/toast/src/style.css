@@ -1,0 +1,23 @@
+.fnos-toast-host{position:fixed;z-index:2147483647;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow-y:auto;pointer-events:none;scrollbar-width:thin}
+.fnos-toast-host--top-left{top:12px;left:12px}
+.fnos-toast-host--top-center{top:12px;left:50%;transform:translateX(-50%)}
+.fnos-toast-host--top-right{top:12px;right:12px}
+.fnos-toast-host--bottom-left{bottom:12px;left:12px}
+.fnos-toast-host--bottom-center{bottom:12px;left:50%;transform:translateX(-50%)}
+.fnos-toast-host--bottom-right{bottom:12px;right:12px}
+.fnos-toast-host--center{top:50%;left:50%;transform:translate(-50%,-50%)}
+.fnos-toast{--toast-accent:#52647a;--toast-background:#f7f9fb;--toast-border:#ced7df;display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid var(--toast-border);border-left:4px solid var(--toast-accent);border-radius:9px;background:var(--toast-background);color:#1d2b33;box-shadow:0 9px 28px #16282026;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;pointer-events:auto;overflow-wrap:anywhere}
+.fnos-toast--success{--toast-accent:#16815a;--toast-background:#f2faf5;--toast-border:#bde2ca}
+.fnos-toast--warning{--toast-accent:#a5670c;--toast-background:#fff9ed;--toast-border:#efd6a0}
+.fnos-toast--error{--toast-accent:#ba443e;--toast-background:#fff4f2;--toast-border:#edc2bd}
+.fnos-toast__icon{flex:none;width:18px;height:18px;margin-top:1px;border-radius:50%;background:var(--toast-accent);color:#fff;text-align:center;font:bold 12px/18px sans-serif}
+.fnos-toast__icon::before{content:"i"}
+.fnos-toast--success .fnos-toast__icon::before{content:"✓"}
+.fnos-toast--warning .fnos-toast__icon::before{content:"!"}
+.fnos-toast--error .fnos-toast__icon::before{content:"×"}
+.fnos-toast__body{flex:1;min-width:0;user-select:text}
+.fnos-toast__title{display:block;font-weight:700;color:var(--toast-accent)}
+.fnos-toast__content{margin-top:2px;white-space:pre-wrap}
+.fnos-toast__close{flex:none;align-self:flex-start;margin:-4px -5px 0 0;padding:2px 5px;border:0;border-radius:4px;background:transparent;color:#61716b;cursor:pointer;font:20px/1 sans-serif}
+.fnos-toast__close:hover{background:#0000000d;color:#1d2b33}
+.fnos-toast__close:focus-visible{outline:2px solid var(--toast-accent);outline-offset:2px}
