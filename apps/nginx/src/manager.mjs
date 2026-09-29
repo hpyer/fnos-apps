@@ -225,8 +225,17 @@ export class NginxManager {
     const child = this.child; if (!child) return;
     child.kill('SIGQUIT');
     for (let i = 0; i < 50 && await processAlive(child.pid); i++) await new Promise(r => setTimeout(r, 100));
-    if (await processAlive(child.pid)) child.kill('SIGTERM');
+    if (await processAlive(child.pid)) {
+      child.kill('SIGTERM');
+      for (let i = 0; i < 20 && await processAlive(child.pid); i++) await new Promise(r => setTimeout(r, 100));
+    }
+    if (await processAlive(child.pid)) throw Error('Nginx 停止超时');
     if (this.child === child) this.child = null;
+  }
+  async restart() {
+    if (!this.child || !await processAlive(this.child.pid)) throw Error('Nginx 未运行');
+    await this.stop();
+    await this.start();
   }
   async reload() {
     await this.validate();

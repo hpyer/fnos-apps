@@ -21,6 +21,17 @@ test('站点文件仅接受顶层 server 块且阻止路径穿越', () => {
   assert.throws(() => siteName('../bad.conf'), /文件名/);
 });
 
+test('重启只允许运行中的 Nginx，并按停止、启动顺序执行', async t => {
+  const manager = await fixture(t);
+  await assert.rejects(manager.restart(), /未运行/);
+  manager.child = { pid: process.pid };
+  const calls = [];
+  manager.stop = async () => { calls.push('stop'); };
+  manager.start = async () => { calls.push('start'); };
+  await manager.restart();
+  assert.deepEqual(calls, ['stop', 'start']);
+});
+
 test('候选配置验证失败不会覆盖线上站点文件', async t => {
   const manager = await fixture(t);
   assert.doesNotMatch(await manager.readConfig(), /^user /);

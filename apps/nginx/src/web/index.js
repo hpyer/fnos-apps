@@ -71,8 +71,12 @@ async function refresh() {
   $('running').textContent = status.running ? '运行中' : '已停止';
   $('dot').classList.toggle('on', status.running);
   $('active').textContent = status.activeVersion ? `Nginx ${status.activeVersion}` : '未选择版本';
+  $('start').hidden = status.running;
   $('start').disabled = status.running || !status.activeVersion;
+  $('stop').hidden = !status.running;
   $('stop').disabled = !status.running;
+  $('restart').hidden = !status.running;
+  $('restart').disabled = !status.running;
   $('reload').disabled = !status.running;
   const disabledSites = status.disabledSites || [];
   const siteRows = [...status.sites.map(name => siteItem(name, true)), ...disabledSites.map(name => siteItem(name, false))];
@@ -119,6 +123,7 @@ $('cancel-config').addEventListener('click', () => $('config-dialog').close());
 $('save-config').addEventListener('click', () => run(() => api('config/save', { source: $('config-source').value }), '主配置已校验并保存', 'config-dialog'));
 $('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
 $('stop').addEventListener('click', () => run(() => api('service/stop'), 'Nginx 已停止'));
+$('restart').addEventListener('click', () => run(() => api('service/restart'), 'Nginx 已重启'));
 $('reload').addEventListener('click', () => run(() => api('reload'), '配置已校验并发送平滑重载'));
 $('channel').addEventListener('change', () => { latest = null; renderLatest(); checkVersion(); });
 async function checkVersion() {

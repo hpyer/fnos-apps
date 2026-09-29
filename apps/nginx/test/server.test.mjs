@@ -46,3 +46,18 @@ test('管理员可切换站点状态', async t => {
   assert.deepEqual(await response.json(), { ok: true, enabled: false });
   assert.deepEqual(request, { name: 'example.conf', enabled: false });
 });
+
+test('管理员可重启 Nginx', async t => {
+  let restarted = 0;
+  const manager = {
+    exclusive: task => task(),
+    restart: async () => { restarted++; }
+  };
+  const service = await serve(manager, { assets: new URL('../src/web/', import.meta.url), devPort: 0 });
+  t.after(() => service.close());
+  const url = `http://127.0.0.1:${service.server.address().port}/app/nginx-for-fnos/api/service/restart`;
+  const response = await fetch(url, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(restarted, 1);
+});

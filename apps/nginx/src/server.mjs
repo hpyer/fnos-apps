@@ -46,6 +46,7 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
         case 'reload': result = await manager.exclusive(async () => { await manager.reload(); return { ok: true }; }); break;
         case 'service/start': result = await manager.exclusive(async () => { await manager.start(); return { ok: true }; }); break;
         case 'service/stop': result = await manager.exclusive(async () => { await manager.stop(); return { ok: true }; }); break;
+        case 'service/restart': result = await manager.exclusive(async () => { await manager.restart(); return { ok: true }; }); break;
         case 'version/activate': result = await manager.activateVersion(input.version); break;
         case 'version/check': result = await manager.checkOfficial(input.channel); break;
         case 'version/install': result = await manager.installOfficial(input.channel); break;
