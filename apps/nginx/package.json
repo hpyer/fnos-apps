@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/main.mjs --dev",
+    "dev": "node dev.mjs",
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@fnos/toast": "workspace:*"
   }
 }

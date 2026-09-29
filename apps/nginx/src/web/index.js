@@ -1,7 +1,12 @@
+import { toast } from '@fnos/toast';
+
 const BASE = '/app/nginx-for-fnos';
 const $ = id => document.getElementById(id);
 let selected = '', status = null, latest = null;
-function message(value, error = false) { $('message').textContent = value; $('message').classList.toggle('error', error); }
+function notify(content, type = 'info', duration = 3000) {
+  const dialog = $('site-dialog');
+  return toast({ content, type, duration, container: dialog.open ? dialog : document.body });
+}
 async function api(action, input = {}) {
   const response = await fetch(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) });
   const data = await response.json();
@@ -14,9 +19,20 @@ async function get(action, query = '') {
   if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
   return data;
 }
-async function run(task, success) {
-  try { message('正在处理…'); const result = await task(); message(result?.message || success); await refresh(); return result; }
-  catch (error) { message(error.message, true); return null; }
+async function run(task, success, closeDialogOnSuccess = false) {
+  const pending = notify('正在处理…', 'info', 0);
+  try {
+    const result = await task();
+    await refresh();
+    pending.close();
+    if (closeDialogOnSuccess) $('site-dialog').close();
+    notify(result?.message || success, 'success');
+    return result;
+  } catch (error) {
+    pending.close();
+    notify(error.message, 'error');
+    return null;
+  }
 }
 function renderLatest() {
   const channel = $('channel').value;
@@ -60,11 +76,11 @@ async function refresh() {
   if (latest && latest.channel === $('channel').value) latest.installed = status.versions.includes(latest.version);
   renderLatest();
 }
-function showDialog() { $('site-error').hidden = true; $('site-error').textContent = ''; $('site-dialog').showModal(); $('site-name').focus(); }
+function showDialog() { $('site-dialog').showModal(); $('site-name').focus(); }
 function siteBaseName(value) { return value.trim().replace(/\.conf$/i, ''); }
 async function openSite(name) {
   try { const data = await get('site', `?name=${encodeURIComponent(name)}`); selected = name; $('dialog-title').textContent = `编辑 ${name}`; $('site-name').value = siteBaseName(name); $('site-name').readOnly = true; $('site-source').value = data.source; $('delete-site').hidden = false; showDialog(); }
-  catch (error) { message(error.message, true); }
+  catch (error) { notify(error.message, 'error'); }
 }
 $('new-site').addEventListener('click', () => {
   selected = ''; $('dialog-title').textContent = '新增站点'; $('site-name').value = ''; $('site-name').readOnly = false; $('delete-site').hidden = true;
@@ -76,15 +92,11 @@ $('site-name').addEventListener('change', () => { $('site-name').value = siteBas
 $('save-site').addEventListener('click', async () => {
   const baseName = siteBaseName($('site-name').value);
   const name = selected || (baseName ? `${baseName}.conf` : '');
-  const result = await run(() => api('site/save', { name, source: $('site-source').value }), '配置已校验并保存');
-  if (result) $('site-dialog').close();
-  else { $('site-error').textContent = $('message').textContent; $('site-error').hidden = false; }
+  await run(() => api('site/save', { name, source: $('site-source').value }), '配置已校验并保存', true);
 });
 $('delete-site').addEventListener('click', async () => {
   if (!selected || !confirm(`删除 ${selected}？`)) return;
-  const result = await run(() => api('site/delete', { name: selected }), '配置已删除');
-  if (result) $('site-dialog').close();
-  else { $('site-error').textContent = $('message').textContent; $('site-error').hidden = false; }
+  await run(() => api('site/delete', { name: selected }), '配置已删除', true);
 });
 $('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
 $('stop').addEventListener('click', () => run(() => api('service/stop'), 'Nginx 已停止'));
@@ -94,7 +106,7 @@ async function checkVersion() {
   const channel = $('channel').value;
   $('latest-version').textContent = '检查中…'; $('latest-detail').textContent = '正在连接 nginx.org'; $('install-version').disabled = true;
   try { const result = await api('version/check', { channel }); if ($('channel').value === channel) { latest = result; renderLatest(); } }
-  catch (error) { if ($('channel').value === channel) { latest = null; $('latest-version').textContent = '无法检查'; $('latest-detail').textContent = error.message; } }
+  catch (error) { if ($('channel').value === channel) { latest = null; $('latest-version').textContent = '无法检查'; $('latest-detail').textContent = '请稍后重试'; notify(error.message, 'error'); } }
 }
 $('check-version').addEventListener('click', checkVersion);
 $('install-version').addEventListener('click', async () => {
@@ -106,4 +118,4 @@ $('save-notify').addEventListener('click', () => run(() => api('notification/set
 $('test-path').addEventListener('click', () => run(() => api('notification/test', { path: $('notify-path').value.trim() }), '通知文件读写测试通过'));
 $('check-notify').addEventListener('click', () => run(() => api('notification/check'), '已检查通知文件'));
 try { await refresh(); $('channel').value = status.channel || 'stable'; $('notify-enabled').checked = status.settings.notificationEnabled; $('notify-path').value = status.settings.notificationPath; $('notify-interval').value = status.settings.intervalMinutes; renderLatest(); checkVersion(); }
-catch (error) { message(error.message, true); }
+catch (error) { notify(error.message, 'error'); }

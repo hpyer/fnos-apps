@@ -13,7 +13,6 @@
     <div class="actions service-actions"><button id="start" type="button">启动</button><button id="stop" type="button">停止</button><button id="reload" type="button" class="primary">校验并重载</button></div>
   </header>
   <main>
-    <p id="message" class="message" role="status" aria-live="polite"></p>
     <section class="panel sites"><div class="panel-head"><div><h2>站点配置 <span id="site-count" class="count">0</span></h2><p>每个文件包含一个或多个 server 块</p></div><button id="new-site" type="button" class="primary">新增站点</button></div><div id="site-list" class="site-list"></div></section>
     <div class="bottom-grid">
       <section class="panel versions"><div class="panel-head"><div><h2>Nginx 版本</h2><p>从 nginx.org 官方软件包仓库获取</p></div></div>
@@ -35,7 +34,7 @@
       <label for="site-source">配置内容</label>
       <textarea id="site-source" spellcheck="false" placeholder="server {&#10;    listen 80;&#10;    server_name example.com;&#10;}"></textarea>
     </div>
-    <div class="dialog-foot"><p id="site-error" class="dialog-error" role="alert" hidden></p><button id="delete-site" type="button" class="danger" hidden>删除站点</button><span class="spacer"></span><button id="cancel-dialog" type="button">取消</button><button id="save-site" type="button" class="primary">校验并保存</button></div>
+    <div class="dialog-foot"><button id="delete-site" type="button" class="danger" hidden>删除站点</button><span class="spacer"></span><button id="cancel-dialog" type="button">取消</button><button id="save-site" type="button" class="primary">校验并保存</button></div>
   </dialog>
 </body>
 </html>
