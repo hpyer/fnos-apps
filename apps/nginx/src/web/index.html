@@ -18,7 +18,7 @@
     <div class="bottom-grid">
       <section class="panel versions"><div class="panel-head"><div><h2>Nginx 版本</h2><p>从 nginx.org 官方软件包仓库获取</p></div></div>
         <div class="version-tools"><label for="channel">更新通道</label><select id="channel"><option value="stable">稳定版</option><option value="mainline">主线版</option></select><button id="check-version" type="button">检查更新</button></div>
-        <div class="latest"><div><span class="muted">最新版本</span><strong id="latest-version">尚未检查</strong><small id="latest-detail">默认检查稳定版</small></div><button id="install-version" type="button" class="primary" disabled>下载并安装</button></div>
+        <div class="latest"><div><div class="latest-heading"><span class="muted">最新版本</span><strong id="latest-version">尚未检查</strong></div><small id="latest-detail">默认检查稳定版</small></div><button id="install-version" type="button" class="primary" disabled>下载并安装</button></div>
         <details class="installed"><summary>已安装版本 <span id="version-count">0</span></summary><div id="version-list" class="version-list"></div></details>
       </section>
       <section class="panel notification"><div class="panel-head"><div><h2>证书更新通知</h2><p>证书服务写入新时间戳后自动重载</p></div><label class="toggle"><input id="notify-enabled" type="checkbox"><span>启用</span></label></div>
