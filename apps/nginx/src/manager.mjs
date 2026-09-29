@@ -358,10 +358,20 @@ export class NginxManager {
         throw error;
       }
       this.state.channel = channel; await this.saveState();
-      return { version: entry.version, channel };
+      if (!this.state.activeVersion) {
+        try {
+          await this.activateVersionNow(entry.version);
+          return { version: entry.version, channel, autoActivated: true, message: '官方版本已安装并自动启用' };
+        } catch (error) {
+          this.state.lastResult = `自动启用失败：${error.message}`; await this.saveState();
+          return { version: entry.version, channel, autoActivated: false,
+            warning: `版本已安装，但自动启用失败：${error.message}` };
+        }
+      }
+      return { version: entry.version, channel, autoActivated: false, message: '官方版本已安装，可在已安装版本中启用' };
     } finally { await rm(stage, { recursive: true, force: true }); }
   }); }
-  async activateVersion(version) { return this.exclusive(async () => {
+  async activateVersionNow(version) {
     versionName(version); await this.ensureRuntime(version); await this.validate(this.config, version);
     const previous = this.state.activeVersion;
     await this.stop(); this.state.activeVersion = version;
@@ -372,7 +382,8 @@ export class NginxManager {
       throw error;
     }
     return { activeVersion: version };
-  }); }
+  }
+  async activateVersion(version) { return this.exclusive(() => this.activateVersionNow(version)); }
   async removeVersion(version) { return this.exclusive(async () => {
     versionName(version); if (version === this.state.activeVersion) throw Error('不能删除正在使用的版本');
     await rm(path.join(this.versions, version), { recursive: true, force: true });

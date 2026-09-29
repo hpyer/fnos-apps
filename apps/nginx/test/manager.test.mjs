@@ -195,8 +195,54 @@ test('官方版本下载后校验架构，安装失败不保留版本目录', as
     }
     return 'nginx version: nginx/1.30.5';
   };
-  assert.equal((await manager.installOfficial('stable')).version, '1.30.5');
+  const installed = await manager.installOfficial('stable');
+  assert.equal(installed.version, '1.30.5');
+  assert.equal(installed.autoActivated, false);
+  assert.equal(manager.state.activeVersion, '1.28.0');
   await assert.rejects(manager.installOfficial('stable'), /已安装/);
+});
+
+test('首次安装自动启用，失败时保留下载版本供重试', async t => {
+  let latestVersion = '1.30.5';
+  const binary = Buffer.alloc(20);
+  Buffer.from('7f454c46', 'hex').copy(binary);
+  binary[4] = 2; binary[5] = 1; binary.writeUInt16LE(62, 18);
+  const repository = {
+    latest: async () => ({ version: latestVersion, packageVersion: `${latestVersion}-1~bookworm`, channel: 'stable', distribution: 'debian bookworm / amd64' }),
+    download: async (_entry, target) => writeFile(target, 'deb')
+  };
+  const manager = await fixture(t, { platform: 'linux', arch: 'x64', repository });
+  manager.state.activeVersion = '';
+  manager.run = async (command, args) => {
+    if (command === 'dpkg-deb') {
+      await mkdir(path.join(args[2], 'usr/sbin'), { recursive: true });
+      await writeFile(path.join(args[2], 'usr/sbin/nginx'), binary); return '';
+    }
+    if (args.includes('-v')) return `nginx version: nginx/${path.basename(path.dirname(command))}`;
+    return 'ok';
+  };
+  let starts = 0;
+  manager.start = async () => { starts++; assert.equal(manager.state.activeVersion, latestVersion); };
+  const first = await manager.installOfficial('stable');
+  assert.equal(first.autoActivated, true);
+  assert.equal(manager.state.activeVersion, '1.30.5');
+  assert.equal(starts, 1);
+
+  latestVersion = '1.30.6';
+  const second = await manager.installOfficial('stable');
+  assert.equal(second.autoActivated, false);
+  assert.equal(manager.state.activeVersion, '1.30.5');
+  assert.equal(starts, 1);
+
+  manager.state.activeVersion = '';
+  latestVersion = '1.30.7';
+  manager.start = async () => { throw Error('端口不可用'); };
+  const failed = await manager.installOfficial('stable');
+  assert.equal(failed.autoActivated, false);
+  assert.match(failed.warning, /端口不可用/);
+  assert.match(manager.state.lastResult, /自动启用失败：端口不可用/);
+  assert.equal(manager.state.activeVersion, '');
+  assert.ok((await manager.status()).versions.includes('1.30.7'));
 });
 
 test('通知默认关闭且间隔必须有效', () => {

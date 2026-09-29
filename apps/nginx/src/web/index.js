@@ -25,7 +25,7 @@ async function run(task, success, closeDialogId = '') {
     await refresh();
     pending.close();
     if (closeDialogId) $(closeDialogId).close();
-    notify(result?.message || success, 'success');
+    notify(result?.warning || result?.message || success, result?.warning ? 'warning' : 'success');
     return result;
   } catch (error) {
     pending.close();
@@ -60,7 +60,7 @@ function versionItem(version) {
   if (version === status.activeVersion) { const current = document.createElement('em'); current.textContent = '正在使用'; label.append(current); }
   const controls = document.createElement('div'); controls.className = 'actions';
   if (version !== status.activeVersion) {
-    const activate = document.createElement('button'); activate.type = 'button'; activate.textContent = '切换'; activate.addEventListener('click', () => run(() => api('version/activate', { version }), '版本已切换'));
+    const activate = document.createElement('button'); activate.type = 'button'; activate.textContent = '启用'; activate.addEventListener('click', () => run(() => api('version/activate', { version }), '版本已启用'));
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = '删除'; remove.addEventListener('click', () => { if (confirm(`删除版本 ${version}？`)) run(() => api('version/remove', { version }), '版本已删除'); });
     controls.append(activate, remove);
   }
@@ -130,7 +130,7 @@ async function checkVersion() {
 $('check-version').addEventListener('click', checkVersion);
 $('install-version').addEventListener('click', async () => {
   const channel = $('channel').value;
-  const result = await run(() => api('version/install', { channel }), '官方版本已下载并安装，可在已安装版本中切换');
+  const result = await run(() => api('version/install', { channel }), '官方版本已下载并安装');
   if (result) { document.querySelector('.installed').open = true; await checkVersion(); }
 });
 $('save-notify').addEventListener('click', () => run(() => api('notification/settings', { notificationEnabled: $('notify-enabled').checked, notificationPath: $('notify-path').value.trim(), intervalMinutes: Number($('notify-interval').value) }), '通知设置已保存'));
