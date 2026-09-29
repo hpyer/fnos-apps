@@ -21,7 +21,7 @@
         <details class="installed"><summary>已安装版本 <span id="version-count">0</span></summary><div id="version-list" class="version-list"></div></details>
       </section>
       <section class="panel notification"><div class="panel-head"><div><h2>证书更新通知</h2><p>证书服务写入新时间戳后自动重载</p></div><label class="toggle"><input id="notify-enabled" type="checkbox"><span>启用</span></label></div>
-        <div class="notify-fields"><div class="path-field"><label for="notify-path">NAS 通知文件绝对路径</label><input id="notify-path" type="text" placeholder="/vol1/shared/nginx.reload" spellcheck="false"></div><div class="interval-field"><label for="notify-interval">间隔（分钟）</label><input id="notify-interval" type="number" min="1" max="1440" value="30"></div></div>
+        <div class="notify-fields"><div class="path-field"><label for="notify-path">NAS 通知文件绝对路径</label><input id="notify-path" type="text" placeholder="/vol1/@appshare/nginx-for-fnos/nginx.reload" spellcheck="false"></div><div class="interval-field"><label for="notify-interval">间隔（分钟）</label><input id="notify-interval" type="number" min="1" max="1440" value="30"></div></div>
         <div class="notify-actions"><button id="test-path" type="button">测试并创建文件</button><button id="check-notify" type="button">立即检查</button><button id="save-notify" type="button" class="primary">保存设置</button></div><p id="notify-state" class="hint"></p>
       </section>
     </div>
