@@ -32,6 +32,19 @@ test('重启只允许运行中的 Nginx，并按停止、启动顺序执行', as
   assert.deepEqual(calls, ['stop', 'start']);
 });
 
+test('官方版本检查通过自定义来源查询指定通道', async t => {
+  const channels = [];
+  const manager = await fixture(t, { repository: { latest: async channel => {
+    channels.push(channel);
+    return { version: '1.29.0', packageVersion: '1.29.0-1', distribution: 'bookworm' };
+  } } });
+  const result = await manager.checkOfficial('mainline');
+  assert.deepEqual(channels, ['mainline']);
+  assert.equal(result.updateAvailable, true);
+  assert.equal(result.channel, 'mainline');
+  assert.equal(manager.state.channel, 'mainline');
+});
+
 test('候选配置验证失败不会覆盖线上站点文件', async t => {
   const manager = await fixture(t);
   assert.doesNotMatch(await manager.readConfig(), /^user /);

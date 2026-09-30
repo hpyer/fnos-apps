@@ -9,6 +9,8 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@fnos/version-check": "workspace:*",
     "@fnos/toast": "workspace:*"
-  }
+  },
+  "fnos": { "versionFile": "app/version" }
 }

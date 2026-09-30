@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, chmod, copyFile, lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { UpdateChecker } from '@fnos/version-check';
 import { OfficialRepository, channelName } from './official.mjs';
 
 const DEFAULTS = { notificationEnabled: false, notificationPath: '', intervalMinutes: 30, lastHandled: '', lastHandledAt: '', lastResult: '', channel: 'stable' };
@@ -89,6 +90,7 @@ export class NginxManager {
   constructor(root, { shareRoot = root, platform = process.platform, arch = process.arch, run = command, repository } = {}) {
     this.root = root;
     this.shareRoot = shareRoot; this.platform = platform; this.arch = arch; this.run = run; this.repository = repository || new OfficialRepository({ platform, arch });
+    this.versionChecker = new UpdateChecker({ check: ({ channel }) => this.repository.latest(channel) });
     this.sites = path.join(shareRoot, 'sites'); this.versions = path.join(shareRoot, 'versions');
     this.runtimeVersions = path.join(root, 'runtime-versions');
     this.logs = path.join(shareRoot, 'logs'); this.temp = path.join(shareRoot, 'temp'); this.config = path.join(shareRoot, 'nginx.conf');
@@ -322,7 +324,7 @@ export class NginxManager {
   }); }
   async checkOfficial(channel = this.state.channel) {
     channelName(channel);
-    const entry = await this.repository.latest(channel);
+    const entry = await this.versionChecker.checkNow({ channel });
     this.state.channel = channel; await this.saveState();
     const installed = await readdir(this.versions);
     return { version: entry.version, packageVersion: entry.packageVersion, channel, distribution: entry.distribution,

@@ -1,4 +1,5 @@
 import { toast } from '@fnos/toast';
+import { watchAppUpdates } from '@fnos/version-check/client';
 
 const BASE = '/app/nginx-for-fnos';
 const $ = id => document.getElementById(id);
@@ -143,3 +144,4 @@ $('test-path').addEventListener('click', () => run(() => api('notification/test'
 $('check-notify').addEventListener('click', () => run(() => api('notification/check'), '已检查通知文件'));
 try { await refresh(); $('channel').value = status.channel || 'stable'; $('notify-enabled').checked = status.settings.notificationEnabled; $('notify-path').value = status.settings.notificationPath; $('notify-interval').value = status.settings.intervalMinutes; renderLatest(); checkVersion(); }
 catch (error) { notify(error.message, 'error'); }
+watchAppUpdates({ endpoint: `${BASE}/api/update` });

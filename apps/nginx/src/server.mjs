@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { chmod, readFile, rm } from 'node:fs/promises';
+import { GitHubReleaseSource, UpdateChecker, readAppVersion } from '@fnos/version-check';
 
 export const PREFIX = '/app/nginx-for-fnos';
 function json(response, status, value) {
@@ -15,6 +16,9 @@ async function body(request, limit = 300000) {
   return JSON.parse(data || '{}');
 }
 export async function serve(manager, { assets, socket, devPort } = {}) {
+  const version = await readAppVersion([new URL('./version', import.meta.url), new URL('../native/manifest', import.meta.url)]);
+  const updateChecker = new UpdateChecker(new GitHubReleaseSource({ repository: 'hpyer/fnos-apps', tagPrefix: 'nginx', filePrefix: 'nginx-for-fnos', version }), { cacheMs: 60 * 60 * 1000 });
+  const checkUpdate = () => updateChecker.check();
   const files = new Map(await Promise.all(['index.html', 'index.js', 'index.css'].map(async name => [name, await readFile(new URL(name, assets))])));
   const server = http.createServer(async (request, response) => {
     try {
@@ -30,6 +34,7 @@ export async function serve(manager, { assets, socket, devPort } = {}) {
         return response.end(files.get(asset));
       }
       if (request.method === 'GET' && url.pathname === `${PREFIX}/api/status`) return json(response, 200, await manager.status());
+      if (request.method === 'GET' && url.pathname === `${PREFIX}/api/update`) return json(response, 200, await checkUpdate());
       if (request.method === 'GET' && url.pathname === `${PREFIX}/api/config`) return json(response, 200, { source: await manager.readConfig() });
       if (request.method === 'GET' && url.pathname === `${PREFIX}/api/site`) return json(response, 200, { name: url.searchParams.get('name'), source: await manager.listSite(url.searchParams.get('name')) });
       if (request.method !== 'POST' || !url.pathname.startsWith(`${PREFIX}/api/`)) return json(response, 404, { error: '未找到接口' });
