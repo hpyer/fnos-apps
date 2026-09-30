@@ -1,6 +1,6 @@
 import "./prepare-native.mjs";
 import { build } from "esbuild";
-import { cp, mkdir, realpath, rm, access } from "node:fs/promises";
+import { cp, mkdir, realpath, rm, access, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const source = fileURLToPath(new URL("./", import.meta.url));
@@ -9,6 +9,9 @@ const root = path.resolve(source, "../.."),
 await rm(target, { recursive: true, force: true });
 await cp(path.join(source, "native"), target, { recursive: true });
 await mkdir(path.join(target, "app/web"), { recursive: true });
+const appVersion = /^version\s*=\s*(\d+\.\d+\.\d+)\s*$/m.exec(await readFile(path.join(source, "native/manifest"), "utf8"))?.[1];
+if (!appVersion) throw new Error("manifest 缺少有效版本号");
+await writeFile(path.join(target, "app/version"), `version = ${appVersion}\n`);
 await build({
   entryPoints: [path.join(source, "src/main.mjs")],
   outfile: path.join(target, "app/main.mjs"),
@@ -16,7 +19,7 @@ await build({
   platform: "node",
   target: "node24",
   format: "esm",
-  packages: "external",
+  external: ["node-pty", "ws"],
 });
 await cp(
   path.join(source, "src/worker.mjs"),

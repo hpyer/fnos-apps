@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
+import { watchAppUpdates } from '@fnos/version-check/client';
 const term = new Terminal({
   cursorBlink: true,
   fontSize: 14,
@@ -130,3 +131,4 @@ $("connect").onclick = async () => {
 };
 addEventListener("pagehide", () => socket?.close());
 resize();
+watchAppUpdates({ endpoint: './api/update' });

@@ -9,6 +9,8 @@
     "test": "node prepare-native.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@fnos/version-check": "workspace:*",
+    "@fnos/toast": "workspace:*",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/addon-unicode-graphemes": "0.4.0",
     "@xterm/xterm": "6.0.0",
@@ -16,6 +18,7 @@
     "ws": "8.21.3"
   },
   "fnos": {
+    "versionFile": "app/version",
     "nativeModules": [
       "app/node_modules/node-pty/prebuilds/linux-{arch}/pty.node"
     ]

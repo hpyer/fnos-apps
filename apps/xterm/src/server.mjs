@@ -2,6 +2,7 @@ import http from "node:http";
 import { randomBytes } from "node:crypto";
 import { readFile, chmod, rm } from "node:fs/promises";
 import { WebSocketServer, WebSocket } from "ws";
+import { GitHubReleaseSource, UpdateChecker, readAppVersion } from '@fnos/version-check';
 export const PREFIX = "/app/xterm-for-fnos";
 export function dimensions(value) {
   return (
@@ -22,6 +23,9 @@ export async function serve({
   identity,
   now = Date.now,
 }) {
+  const version = await readAppVersion([new URL('./version', import.meta.url), new URL('../native/manifest', import.meta.url)]);
+  const updateChecker = new UpdateChecker(new GitHubReleaseSource({ repository: 'hpyer/fnos-apps', tagPrefix: 'xterm', filePrefix: 'xterm-for-fnos', version }), { cacheMs: 60 * 60 * 1000 });
+  const checkUpdate = () => updateChecker.check();
   const files = new Map(
     await Promise.all(
       ["index.html", "index.js", "index.css", "icon.png"].map(async (name) => [
@@ -72,6 +76,10 @@ export async function serve({
     if (req.method === "GET" && req.url === PREFIX) {
       res.writeHead(302, { location: PREFIX + "/" });
       return res.end();
+    }
+    if (req.method === "GET" && req.url === PREFIX + "/api/update") {
+      checkUpdate().then(value => json(res, 200, value), () => json(res, 503, { error: '暂时无法检查更新' }));
+      return;
     }
     if (req.method === "POST" && req.url === PREFIX + "/api/ticket") {
       req.resume();
