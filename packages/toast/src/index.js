@@ -3,10 +3,12 @@ const POSITIONS = new Set(['top-left', 'top-center', 'top-right', 'bottom-left',
 const hosts = new WeakMap();
 
 /** Show a toast. Import @fnos/toast/style.css in the app's stylesheet. */
-export function toast({ title, content = '', type = 'info', position = 'top-right', duration = 3000, container = document.body } = {}) {
+export function toast({ title, content = '', link, type = 'info', position = 'top-right', duration = 3000, container = document.body } = {}) {
   if (!Object.hasOwn(TITLES, type)) throw new TypeError(`Unknown toast type: ${type}`);
   if (!POSITIONS.has(position)) throw new TypeError(`Unknown toast position: ${position}`);
   if (!Number.isFinite(duration) || duration < 0) throw new TypeError('Toast duration must be a non-negative number');
+  const linkURL = link ? new URL(link.href) : null;
+  if (linkURL && linkURL.protocol !== 'https:') throw new TypeError('Toast link must use HTTPS');
 
   let positions = hosts.get(container);
   if (!positions) { positions = new Map(); hosts.set(container, positions); }
@@ -35,6 +37,15 @@ export function toast({ title, content = '', type = 'info', position = 'top-righ
     detail.className = 'fnos-toast__content';
     detail.textContent = String(content);
     body.append(detail);
+  }
+  if (link) {
+    const anchor = document.createElement('a');
+    anchor.className = 'fnos-toast__link';
+    anchor.href = linkURL.href;
+    anchor.textContent = String(link.label || '查看详情');
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    body.append(anchor);
   }
   const dismiss = document.createElement('button');
   dismiss.type = 'button';

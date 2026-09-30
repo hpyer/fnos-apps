@@ -52,6 +52,14 @@ test('toast defaults, hover pause, custom title and manual close', () => {
     pending.close();
     assert.equal(body.childElementCount, 0);
 
+    const linked = toast({ content: '新版可用', link: { href: 'https://github.com/example/app.fpk', label: '下载 FPK' }, duration: 0 });
+    const anchor = body.children[0].children[0].children[1].children[2];
+    assert.equal(anchor.href, 'https://github.com/example/app.fpk');
+    assert.equal(anchor.textContent, '下载 FPK');
+    assert.equal(anchor.rel, 'noopener noreferrer');
+    assert.throws(() => toast({ link: { href: 'javascript:alert(1)' } }), /HTTPS/);
+    linked.close();
+
     const warning = toast({ type: 'warning', title: '', content: '注意', position: 'bottom-left' });
     assert.equal(body.children[0].className, 'fnos-toast-host fnos-toast-host--bottom-left');
     assert.equal(body.children[0].children[0].children[1].children[0].textContent, '警告');
