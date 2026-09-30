@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import semver from 'semver';
+import { NpmRegistrySource, UpdateChecker } from '@fnos/version-check';
 import { readJson, writeJson } from '../shared/config.mjs';
 import { run } from '../shared/command.mjs';
 
@@ -19,8 +20,8 @@ export class Versions {
     this.directory = path.join(root, 'runtimes', 'versions');
     this.environment = environment;
     this.execute = execute;
-    this.fetcher = fetcher;
     this.signal = signal;
+    this.versionChecker = new UpdateChecker(new NpmRegistrySource({ packageName: PACKAGE, fetcher }));
   }
   location(version) { return path.join(this.directory, exactVersion(version)); }
   entry(version) { return path.join(this.location(version), 'node_modules', PACKAGE, 'lib/bin.js'); }
@@ -35,13 +36,9 @@ export class Versions {
     return items.sort((a, b) => semver.rcompare(a.version, b.version));
   }
   async metadata(config, selector) {
-    const timeout = AbortSignal.timeout(30_000);
-    const response = await this.fetcher(`${config.registry}/${encodeURIComponent(PACKAGE)}/${encodeURIComponent(selector)}`, { signal: this.signal ? AbortSignal.any([timeout, this.signal]) : timeout });
-    if (!response.ok) throw new Error(`标签/版本 ${selector} 查询失败：HTTP ${response.status}`);
-    const data = await response.json();
+    const data = await this.versionChecker.checkNow({ registry: config.registry, selector, signal: this.signal });
     exactVersion(data.version);
-    if (data.name !== PACKAGE || !/^sha(256|384|512)-[A-Za-z0-9+/=]+$/.test(data.dist?.integrity ?? '')) throw new Error('registry 返回了无效的包名或完整性信息');
-    return { version: data.version, integrity: data.dist.integrity };
+    return data;
   }
   async check(config) {
     return Promise.all(config.channels.map(async channel => {

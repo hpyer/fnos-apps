@@ -1,5 +1,6 @@
 import { ICONS } from '../../shared/icons.mjs';
 import { elapsedLabel } from './format.mjs';
+import { watchAppUpdates } from '@fnos/version-check/client';
 const base = '/app/dsh-for-fnos';
 const $ = id => document.getElementById(id);
 const registries = new Set(['https://mirrors.cloud.tencent.com/npm', 'https://registry.npmmirror.com', 'https://registry.yarnpkg.com', 'https://registry.npmjs.org']);
@@ -65,3 +66,4 @@ $('download-form').addEventListener('submit', event => { event.preventDefault();
 $('settings-form').addEventListener('submit', async event => { event.preventDefault(); try { await api('settings', { port: state.config.port, publicHost: state.config.publicHost, registry: $('registry').value, idleTimeoutSeconds: Number($('idle-timeout').value), channels: ['latest', ...[...document.querySelectorAll('[name=channel]:checked')].map(x => x.value)] }); settingsDirty = false; notice('设置已保存。'); await refresh(); } catch (error) { notice(error.message, true); } });
 $('open').addEventListener('click', async () => { try { const result = await api('launch', {}); location.replace(result.url); } catch (error) { notice(error.message, true); } });
 await refresh().catch(error => notice(error.message, true)); setInterval(() => { if (!document.hidden) refresh().catch(error => notice(error.message, true)); }, 2500);
+watchAppUpdates({ endpoint: `${base}/api/update` });

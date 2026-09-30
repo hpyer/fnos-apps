@@ -6,6 +6,7 @@ import { Manager } from '../runtime/manager.mjs';
 import { FleetManager } from '../runtime/fleet.mjs';
 import { Sessions, createDshGateway, json, body } from './gateway.mjs';
 import { validateConfig, writeJson } from '../shared/config.mjs';
+import { GitHubReleaseSource, UpdateChecker, readAppVersion } from '@fnos/version-check';
 
 export const PREFIX = '/app/dsh-for-fnos';
 export const DSH_PREFIX = `${PREFIX}/dsh`;
@@ -47,6 +48,9 @@ async function close(server) {
   await new Promise(resolve => server.close(resolve));
 }
 export async function serve({ root, environment, socket, dev = false, adminPort = 3081, manager, standalone = false }) {
+  const version = await readAppVersion([new URL('./version', import.meta.url), new URL('../../native/manifest', import.meta.url)]);
+  const updateChecker = new UpdateChecker(new GitHubReleaseSource({ repository: 'hpyer/fnos-apps', tagPrefix: 'dsh', filePrefix: 'dsh-for-fnos', version }), { cacheMs: 60 * 60 * 1000 });
+  const checkUpdate = () => updateChecker.check();
   manager ??= standalone ? new Manager(root, environment) : new FleetManager(root, environment);
   await manager.init();
   const multiUser = typeof manager.context === 'function';
@@ -68,6 +72,11 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
     if (dev || !sourceMode) throw error;
     files.set('launcher-bridge.js', Buffer.from(''));
   }
+  let updateJS = '', updateCSS = '';
+  try {
+    updateJS = await readFile(path.join(assetRoot, 'update.js'), 'utf8');
+    updateCSS = await readFile(path.join(assetRoot, 'update.css'), 'utf8');
+  } catch (error) { if (dev || !sourceMode) throw error; }
   let hostBridge = '';
   try { hostBridge = await readFile(path.join(assetRoot, 'host-bridge.js'), 'utf8'); }
   catch (error) {
@@ -78,7 +87,8 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
   // Native and development entry points use the same-origin path gateway.
   // Keep the old listener opt-in for compatibility tests, never bind it by default.
   let sessions = new Sessions();
-  let gateway = standalone ? createDshGateway(manager, sessions, manager.config.port, hostBridge) : null;
+  const updateOptions = { checkUpdate, updateJS, updateCSS };
+  let gateway = standalone ? createDshGateway(manager, sessions, manager.config.port, hostBridge, updateOptions) : null;
   const bind = port => ({ port, host: dev ? '127.0.0.1' : '0.0.0.0' });
   if (gateway) await listen(gateway, bind(manager.config.port));
   const contentTypes = {
@@ -106,6 +116,7 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
     browserOrigins.set(identity(request), origins);
   }
   const pathGateway = createDshGateway(manager, null, 0, hostBridge, {
+    ...updateOptions,
     base: DSH_PREFIX, settingsUrl: `${PREFIX}/settings/`, subpathScript: files.get('subpath.js').toString(),
     authorize: canUse,
     authorizeUpgrade: request => canUse(request) && !!request.headers.origin && browserOrigins.get(identity(request))?.has(request.headers.origin),
@@ -133,6 +144,10 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
       }
       if (request.method === 'GET' && pathname === `${PREFIX}/api/home`) return json(response, 200, { home: homeFor(request) });
       if (request.method === 'GET' && pathname === `${PREFIX}/api/status`) return json(response, 200, await statusFor(request));
+      if (request.method === 'GET' && pathname === `${PREFIX}/api/update`) {
+        if (!isAdmin(request)) return json(response, 403, { error: '仅限管理员检查应用更新' });
+        return json(response, 200, await checkUpdate());
+      }
       if (request.method !== 'POST' || !pathname.startsWith(`${PREFIX}/api/`)) return json(response, 404, { error: '未找到接口' });
       // The fnOS gateway may preserve the browser Origin while replacing Host
       // with its Unix-socket upstream authority. A custom header plus gateway
@@ -168,7 +183,7 @@ export async function serve({ root, environment, socket, dev = false, adminPort 
             // Bind before persisting or retiring the old gateway. A collision
             // then leaves the active instance and its saved configuration intact.
             nextSessions = new Sessions();
-            replacement = createDshGateway(manager, nextSessions, next.port, hostBridge);
+            replacement = createDshGateway(manager, nextSessions, next.port, hostBridge, updateOptions);
             await listen(replacement, bind(next.port));
           }
           try { await writeJson(path.join(root, 'config.json'), next); }

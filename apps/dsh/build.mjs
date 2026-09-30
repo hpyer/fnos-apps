@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { cp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,12 +11,18 @@ const target = path.join(root, 'dist/dsh-for-fnos');
 // below are mapped back to the stable app/ paths expected by those commands.
 await rm(target, { recursive: true, force: true });
 await cp(path.join(source, 'native'), target, { recursive: true });
+await mkdir(path.join(target, 'app'), { recursive: true });
+const appVersion = /^version\s*=\s*(\d+\.\d+\.\d+)\s*$/m.exec(await readFile(path.join(source, 'native/manifest'), 'utf8'))?.[1];
+if (!appVersion) throw new Error('manifest 缺少有效版本号');
+await writeFile(path.join(target, 'app/version'), `version = ${appVersion}\n`);
 for (const name of ['main', 'setup']) {
   await build({ entryPoints: [path.join(source, `src/app/${name}.mjs`)], outfile: path.join(target, `app/${name}.mjs`), bundle: true, platform: 'node', target: 'node24', format: 'esm' });
 }
-for (const [sourceFile, outputFile] of [['web/host/host-bridge.mjs', 'host-bridge.js'], ['web/launcher/launcher-bridge.mjs', 'launcher-bridge.js']]) {
+for (const [sourceFile, outputFile] of [['web/host/host-bridge.mjs', 'host-bridge.js'], ['web/host/update.js', 'update.js'], ['web/launcher/launcher-bridge.mjs', 'launcher-bridge.js']]) {
   await build({ entryPoints: [path.join(source, `src/${sourceFile}`)], outfile: path.join(target, `app/${outputFile}`), bundle: true, platform: 'browser', target: 'es2022', format: 'iife' });
 }
+await build({ entryPoints: [path.join(source, 'src/web/admin/index.css')], outfile: path.join(target, 'app/admin.css'), bundle: true, platform: 'browser', target: 'es2022' });
+await cp(path.join(root, 'packages/toast/src/style.css'), path.join(target, 'app/update.css'));
 for (const [sourceFile, outputFile] of [['web/admin/index.js', 'admin.js'], ['web/launcher/index.js', 'launcher.js']]) {
   // Both browser entry points use the fnOS Web SDK. Bundle them so the native
   // WebView never has to resolve workspace-only bare package specifiers.
@@ -25,7 +31,7 @@ for (const [sourceFile, outputFile] of [['web/admin/index.js', 'admin.js'], ['we
 for (const [sourceFile, outputFile] of [
   ['runtime/worker.mjs', 'worker.mjs'],
   ['web/host/subpath.js', 'subpath.js'],
-  ['web/admin/index.html', 'admin.html'], ['web/admin/index.css', 'admin.css'],
+  ['web/admin/index.html', 'admin.html'],
   ['web/launcher/index.html', 'launcher.html'], ['web/launcher/index.css', 'launcher.css'],
   ['shared/icons.mjs', 'icons.mjs'],
 ]) {

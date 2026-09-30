@@ -9,7 +9,10 @@
     "build": "node build.mjs"
   },
   "dependencies": {
+    "@fnos/version-check": "workspace:*",
+    "@fnos/toast": "workspace:*",
     "@trimjs/web-app": "0.4.2",
     "semver": "7.7.3"
-  }
+  },
+  "fnos": { "versionFile": "app/version" }
 }
