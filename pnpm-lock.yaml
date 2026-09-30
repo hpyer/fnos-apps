@@ -17,6 +17,12 @@ importers:
 
   apps/dsh:
     dependencies:
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
+      '@fnos/toast':
+        specifier: workspace:*
+        version: link:../../packages/toast
       '@trimjs/web-app':
         specifier: 0.4.2
         version: 0.4.2
@@ -26,12 +32,21 @@ importers:
 
   apps/nginx:
     dependencies:
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
       '@fnos/toast':
         specifier: workspace:*
         version: link:../../packages/toast
 
   apps/xterm:
     dependencies:
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
+      '@fnos/toast':
+        specifier: workspace:*
+        version: link:../../packages/toast
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0
@@ -47,6 +62,12 @@ importers:
       ws:
         specifier: 8.21.3
         version: 8.21.3
+
+  packages/version-check:
+    dependencies:
+      '@fnos/toast':
+        specifier: workspace:*
+        version: link:../toast
 
   packages/toast: {}
 

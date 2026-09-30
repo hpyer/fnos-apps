@@ -1,0 +1,12 @@
+{
+  "name": "@fnos/version-check",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "dependencies": { "@fnos/toast": "workspace:*" },
+  "exports": {
+    ".": "./src/check.mjs",
+    "./client": "./src/client.js"
+  }
+}
