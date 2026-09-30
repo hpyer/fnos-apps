@@ -20,6 +20,11 @@ await mkdir(outputDir, { recursive: true });
 await stat(app.distDir).catch(() => { throw new Error(`请先构建应用：${app.distDir}`); });
 const builtManifestVersion = (await readFile(path.join(app.distDir, 'manifest'), 'utf8')).match(/^\s*version\s*=\s*(.+?)\s*$/m)?.[1];
 if (builtManifestVersion !== version) throw new Error(`构建产物版本 ${builtManifestVersion ?? '缺失'} 与打包版本 ${version} 不一致，请先重新构建 ${app.slug}`);
+if (app.packageJson.fnos?.versionFile) {
+  const embeddedVersion = (await readFile(path.join(app.distDir, app.packageJson.fnos.versionFile), 'utf8').catch(() => ''))
+    .match(/^version\s*=\s*(\d+\.\d+\.\d+)\s*$/m)?.[1];
+  if (embeddedVersion !== version) throw new Error(`应用内版本 ${embeddedVersion ?? '缺失'} 与打包版本 ${version} 不一致，请先重新构建 ${app.slug}`);
+}
 
 function patchManifest(source, targetVersion, platform) {
   if (!/^\s*version\s*=/m.test(source) || !/^\s*platform\s*=/m.test(source)) {
