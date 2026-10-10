@@ -1,10 +1,173 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Manager } from '../src/runtime/manager.mjs';
 import { writeJson } from '../src/shared/config.mjs';
+import { Versions, versionAvailability } from '../src/runtime/versions.mjs';
+
+const unsupportedVersionError = error => {
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /0\.1\.6/);
+  assert.match(error.message, /会话/);
+  return true;
+};
+
+async function guardedFixture(t, current = '0.1.6') {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-manager-minimum-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'runtimes'), { recursive: true });
+  await writeJson(path.join(root, 'state.json'), { current, marketInstalled: true });
+  await symlink(`versions/${current}`, path.join(root, 'runtimes/current'));
+  await writeFile(path.join(root, 'host.cordis.patch.yml'), 'unchanged patch\n');
+  const calls = [];
+  const child = {};
+  const address = new URL('http://127.0.0.1:47000/');
+  const process = {
+    child, address,
+    stop: async () => { calls.push('stop'); process.child = null; process.address = null; },
+    start: async version => { calls.push(`start:${version}`); process.child = {}; process.address = address; },
+  };
+  const items = ['0.1.5', '0.1.6-rc.1', '0.1.6', '0.1.6+build', '0.1.7-rc.1'].map(version => ({ version, custom: 'preserved' }));
+  const versions = {
+    list: async () => items,
+    entry: version => { calls.push(`entry:${version}`); return version; },
+    location: version => { calls.push(`location:${version}`); return root; },
+  };
+  const manager = new Manager(root, { DSH_HOME: path.join(root, 'home'), PATH: '' }, {
+    process, versions,
+    execute: async () => { calls.push('plugin'); },
+    watch: () => { calls.push('watch'); return { close() {} }; },
+  });
+  await manager.init();
+  return { root, manager, calls, items, child, address };
+}
+
+test('manager status exposes the fixed minimum and annotates every injected installed entry', async t => {
+  const { manager, items } = await guardedFixture(t, '0.1.5');
+  const status = await manager.status();
+  assert.equal(status.minimumVersion, '0.1.6');
+  assert.equal(status.current, '0.1.5');
+  assert.deepEqual(status.versions, items.map(versionAvailability));
+  assert.ok(items.every(item => !Object.hasOwn(item, 'supported')));
+});
+
+test('unsupported activation and startup reject before process, plugin, state or disk mutations', async t => {
+  const { root, manager, calls, child, address } = await guardedFixture(t);
+  for (const version of ['0.1.5', '0.1.6-rc.1']) {
+    for (const action of [() => manager.activate(version), () => manager.startVersion(version), () => manager.dispatch('activate', { version })]) {
+      const state = structuredClone(manager.state);
+      const diskState = await readFile(path.join(root, 'state.json'), 'utf8');
+      const files = await readdir(root, { recursive: true });
+      await assert.rejects(action(), unsupportedVersionError);
+      assert.deepEqual(calls, []);
+      assert.deepEqual(manager.state, state);
+      assert.equal(manager.process.child, child);
+      assert.equal(manager.process.address, address);
+      assert.equal(await readFile(path.join(root, 'state.json'), 'utf8'), diskState);
+      assert.equal(await readFile(path.join(root, 'host.cordis.patch.yml'), 'utf8'), 'unchanged patch\n');
+      assert.equal(await readlink(path.join(root, 'runtimes/current')), 'versions/0.1.6');
+      assert.deepEqual(await readdir(root, { recursive: true }), files);
+      assert.equal(manager.busy, null);
+    }
+  }
+});
+
+test('ensureMarket guards unsupported versions even when already installed and leaves profile data intact', async t => {
+  const { root, manager, calls } = await guardedFixture(t);
+  const profile = path.join(manager.environment.DSH_HOME, 'profiles/web');
+  await mkdir(path.join(profile, 'node_modules/example'), { recursive: true });
+  await writeFile(path.join(profile, 'package.json'), '{"private":true}\n');
+  await writeFile(path.join(profile, 'pnpm-lock.yaml'), 'keep lockfile\n');
+  await writeFile(path.join(profile, 'node_modules/example/data.txt'), 'keep dependencies\n');
+  for (const marketInstalled of [true, false]) {
+    manager.state.marketInstalled = marketInstalled;
+    await manager.save();
+    const diskState = await readFile(path.join(root, 'state.json'), 'utf8');
+    for (const version of ['0.1.5', '0.1.6-rc.1']) await assert.rejects(manager.ensureMarket(version), unsupportedVersionError);
+    assert.equal(manager.state.marketInstalled, marketInstalled);
+    assert.equal(await readFile(path.join(root, 'state.json'), 'utf8'), diskState);
+    assert.deepEqual(calls, []);
+    assert.equal(await readFile(path.join(profile, 'package.json'), 'utf8'), '{"private":true}\n');
+    assert.equal(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'), 'keep lockfile\n');
+    assert.equal(await readFile(path.join(profile, 'node_modules/example/data.txt'), 'utf8'), 'keep dependencies\n');
+  }
+});
+
+test('market dispatch guards a selected legacy version before stop, market flag reset or state save', async t => {
+  for (const version of ['0.1.5', '0.1.6-rc.1']) {
+    const { root, manager, calls, child, address } = await guardedFixture(t, version);
+    const before = await readFile(path.join(root, 'state.json'), 'utf8');
+    const files = await readdir(root, { recursive: true });
+    await assert.rejects(manager.dispatch('market'), unsupportedVersionError);
+    assert.deepEqual(calls, []);
+    assert.equal(manager.state.current, version);
+    assert.equal(manager.state.marketInstalled, true);
+    assert.equal(manager.process.child, child);
+    assert.equal(manager.process.address, address);
+    assert.equal(await readFile(path.join(root, 'state.json'), 'utf8'), before);
+    assert.equal(await readlink(path.join(root, 'runtimes/current')), `versions/${version}`);
+    assert.deepEqual(await readdir(root, { recursive: true }), files);
+    assert.equal(manager.busy, null);
+    assert.match(manager.error, /0\.1\.6/);
+  }
+});
+
+test('supported semver boundaries can be activated and committed as exact version pointers', async t => {
+  const { root, manager, calls } = await guardedFixture(t);
+  for (const version of ['0.1.6', '0.1.6+build', '0.1.7-rc.1']) {
+    calls.length = 0;
+    await manager.dispatch('activate', { version });
+    assert.equal(manager.state.current, version);
+    assert.equal(await readlink(path.join(root, 'runtimes/current')), `versions/${version}`);
+    assert.equal(JSON.parse(await readFile(path.join(root, 'state.json'), 'utf8')).current, version);
+    assert.ok(calls.includes(`start:${version}`));
+  }
+});
+
+test('a selected legacy runtime fails bootstrap and restart gracefully then permits supported switch and removal', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-manager-legacy-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const versions = new Versions(root, {}, {
+    fetcher: async () => { assert.fail('legacy recovery must not fetch'); },
+    execute: async () => { assert.fail('legacy recovery must not install runtimes'); },
+  });
+  for (const version of ['0.1.5', '0.1.6']) await writeJson(path.join(versions.location(version), 'installed.json'), { version });
+  await writeJson(path.join(root, 'state.json'), { current: '0.1.5', marketInstalled: true });
+  await symlink('versions/0.1.5', path.join(root, 'runtimes/current'));
+  const calls = [];
+  const process = {
+    child: null, address: null,
+    stop: async () => { calls.push('stop'); process.child = null; process.address = null; },
+    start: async entry => { calls.push(entry); process.child = {}; process.address = new URL('http://127.0.0.1:47000/'); },
+  };
+  const manager = new Manager(root, { DSH_HOME: path.join(root, 'home'), PATH: '' }, {
+    versions, process, execute: async () => { assert.fail('legacy recovery must not invoke plugins'); },
+    watch: () => ({ close() {} }),
+  });
+  await manager.init();
+  const diskState = await readFile(path.join(root, 'state.json'), 'utf8');
+  for (const action of [() => manager.bootstrap(), () => manager.dispatch('restart')]) {
+    await assert.rejects(action(), unsupportedVersionError);
+    assert.deepEqual(calls, []);
+    assert.equal(await readFile(path.join(root, 'state.json'), 'utf8'), diskState);
+    assert.equal(await readlink(path.join(root, 'runtimes/current')), 'versions/0.1.5');
+    const status = await manager.status();
+    assert.equal(status.current, '0.1.5');
+    assert.equal(status.running, false);
+    assert.equal(status.busy, null);
+    assert.match(status.error, /会话/);
+    assert.equal(status.versions.find(item => item.version === '0.1.5').supported, false);
+  }
+  await assert.rejects(manager.dispatch('remove', { version: '0.1.5' }), /当前版本/);
+  await manager.dispatch('activate', { version: '0.1.6' });
+  assert.equal(manager.state.current, '0.1.6');
+  assert.equal((await manager.status()).running, true);
+  await manager.dispatch('remove', { version: '0.1.5' });
+  assert.deepEqual((await manager.status()).versions.map(item => item.version), ['0.1.6']);
+  assert.equal(await readlink(path.join(root, 'runtimes/current')), 'versions/0.1.6');
+});
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-manager-'));

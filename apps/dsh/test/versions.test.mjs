@@ -1,10 +1,126 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULTS, loadConfig, validateConfig, writeJson } from '../src/shared/config.mjs';
-import { Versions, PACKAGE, exactVersion } from '../src/runtime/versions.mjs';
+import { Versions, PACKAGE, MINIMUM_VERSION, exactVersion, supportedVersion, versionAvailability } from '../src/runtime/versions.mjs';
+
+const unsupportedVersionError = error => {
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /0\.1\.6/);
+  assert.match(error.message, /会话/);
+  return true;
+};
+
+async function installedRuntime(root, version) {
+  const directory = path.join(root, 'runtimes/versions', version);
+  const item = { version, installedAt: '2026-01-01T00:00:00.000Z', integrity: 'sha512-YQ==' };
+  await writeJson(path.join(directory, 'installed.json'), item);
+  await writeFile(path.join(directory, 'legacy-data.txt'), 'keep installed runtime\n');
+  return item;
+}
+
+test('the fixed supported minimum checks exact semver including prereleases and build metadata', () => {
+  assert.equal(MINIMUM_VERSION, '0.1.6');
+  for (const version of ['0.1.5', '0.1.6-rc.1']) {
+    assert.equal(exactVersion(version), version);
+    assert.throws(() => supportedVersion(version), unsupportedVersionError);
+  }
+  for (const version of ['0.1.6', '0.1.6+build', '0.1.7-rc.1']) {
+    assert.equal(exactVersion(version), version);
+    assert.equal(supportedVersion(version), version);
+  }
+  for (const version of ['latest', '^0.1.6', 'v0.1.6', '../../tmp', '0.1', null, 16]) {
+    assert.throws(() => supportedVersion(version), /精确版本号/);
+  }
+});
+
+test('version availability annotates installed entries without mutating their metadata', () => {
+  for (const version of ['0.1.5', '0.1.6-rc.1', '0.1.6', '0.1.6+build', '0.1.7-rc.1']) {
+    const item = Object.freeze({ version, installedAt: '2026-01-01T00:00:00.000Z', custom: 'preserved' });
+    const result = versionAvailability(item);
+    assert.notEqual(result, item);
+    assert.deepEqual(item, { version, installedAt: '2026-01-01T00:00:00.000Z', custom: 'preserved' });
+    assert.equal(result.version, version);
+    assert.equal(result.installedAt, item.installedAt);
+    assert.equal(result.custom, item.custom);
+    const supported = !['0.1.5', '0.1.6-rc.1'].includes(version);
+    assert.equal(result.supported, supported);
+    if (supported) assert.equal(result.unsupportedReason, null);
+    else {
+      assert.equal(typeof result.unsupportedReason, 'string');
+      assert.match(result.unsupportedReason, /0\.1\.6/);
+      assert.match(result.unsupportedReason, /会话/);
+    }
+  }
+});
+
+test('installed legacy runtimes stay visible with availability and remain removable', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-versions-legacy-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const releases = ['0.1.5', '0.1.6-rc.1', '0.1.6', '0.1.6+build', '0.1.7-rc.1'];
+  const items = await Promise.all(releases.map(version => installedRuntime(root, version)));
+  const versions = new Versions(root, {}, {
+    fetcher: async () => { assert.fail('listing/removal must not fetch'); },
+    execute: async () => { assert.fail('listing/removal must not execute npm'); },
+  });
+  const listed = await versions.list();
+  assert.equal(listed.length, releases.length);
+  for (const item of items) assert.deepEqual(listed.find(entry => entry.version === item.version), versionAvailability(item));
+  await versions.remove('0.1.5');
+  await versions.remove('0.1.6-rc.1');
+  assert.deepEqual((await versions.list()).map(item => item.version).sort(), ['0.1.6', '0.1.6+build', '0.1.7-rc.1'].sort());
+});
+
+test('metadata rejects old tags and exact releases while channel errors remain independent', async () => {
+  const releases = { latest: '0.1.5', beta: '0.1.6-rc.1', rc: '0.1.7-rc.1' };
+  const versions = new Versions('/unused', {}, {
+    fetcher: async url => {
+      const selector = decodeURIComponent(url.split('/').pop());
+      return { ok: true, json: async () => ({ name: PACKAGE, version: releases[selector] ?? selector, dist: { integrity: 'sha512-YQ==' } }) };
+    },
+  });
+  for (const selector of ['latest', 'beta', '0.1.5', '0.1.6-rc.1']) {
+    await assert.rejects(versions.metadata(DEFAULTS, selector), unsupportedVersionError);
+  }
+  for (const version of ['0.1.6', '0.1.6+build', '0.1.7-rc.1']) {
+    assert.equal((await versions.metadata(DEFAULTS, version)).version, version);
+  }
+  const result = await versions.check({ ...DEFAULTS, channels: ['latest', 'beta', 'rc'] });
+  for (const entry of result.slice(0, 2)) {
+    assert.equal(entry.version, undefined);
+    assert.match(entry.error, /0\.1\.6/);
+    assert.match(entry.error, /会话/);
+  }
+  assert.equal(result[2].version, '0.1.7-rc.1');
+});
+
+test('unsupported installs fail before listing, fetching, executing or touching disk even when installed', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-versions-guard-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const installed of [false, true]) {
+    const directory = path.join(root, installed ? 'installed' : 'fresh');
+    await mkdir(directory);
+    if (installed) {
+      await installedRuntime(directory, '0.1.5');
+      await installedRuntime(directory, '0.1.6-rc.1');
+    }
+    const before = await readdir(directory, { recursive: true });
+    const versions = new Versions(directory, {}, {
+      fetcher: async () => { assert.fail('unsupported install must not fetch'); },
+      execute: async () => { assert.fail('unsupported install must not execute npm'); },
+    });
+    versions.list = async () => { assert.fail('unsupported install must reject before installed-version lookup'); };
+    for (const version of ['0.1.5', '0.1.6-rc.1']) {
+      const progress = [];
+      await assert.rejects(versions.install(DEFAULTS, version, update => progress.push(update)), unsupportedVersionError);
+      assert.deepEqual(progress, []);
+      assert.deepEqual(await readdir(directory, { recursive: true }), before);
+      if (installed) assert.equal(await readFile(path.join(directory, 'runtimes/versions', version, 'legacy-data.txt'), 'utf8'), 'keep installed runtime\n');
+    }
+  }
+});
 
 test('configuration always checks latest and validates unprivileged ports', () => {
   assert.equal(DEFAULTS.registry, 'https://mirrors.cloud.tencent.com/npm');

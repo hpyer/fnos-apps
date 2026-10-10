@@ -13,6 +13,7 @@
       <section class="panel versions-panel" aria-labelledby="versions-title">
         <div class="section-head"><div><p class="eyebrow">运行时</p><h1 id="versions-title">版本管理 <span id="count">0 个版本</span></h1></div><button data-action="check">检查更新</button></div>
         <p class="hint">管理员统一下载、删除运行时并设置默认版本；每个用户可在 DSH 顶部选择已安装版本。</p>
+        <p id="minimum-version" class="hint"></p>
         <div id="download-task" class="download-task" role="status" hidden>
           <div class="download-task-head"><strong id="download-task-title">正在下载 DSH</strong><span id="download-task-step"></span></div>
           <div class="download-task-progress" role="progressbar" aria-label="DSH 下载阶段进度"><i id="download-task-bar"></i></div>
@@ -20,7 +21,7 @@
         </div>
         <div id="releases" class="releases"></div>
         <div id="versions"><p class="empty">正在读取已安装版本…</p></div>
-        <form id="download-form" class="download"><label for="version">下载指定版本</label><div class="input-row"><input id="version" name="version" placeholder="例如 0.1.5-rc.1" required autocomplete="off"><button type="submit">下载</button></div></form>
+        <form id="download-form" class="download"><label for="version">下载指定版本</label><div class="input-row"><input id="version" name="version" placeholder="例如 0.1.6" required autocomplete="off"><button type="submit">下载</button></div></form>
       </section>
       <aside class="side-stack">
         <section class="panel settings-panel" aria-labelledby="runtime-title">

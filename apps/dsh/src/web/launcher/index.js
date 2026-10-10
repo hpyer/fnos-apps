@@ -5,6 +5,8 @@ const message = document.getElementById('message');
 const title = document.getElementById('title');
 const authorizeHome = document.getElementById('authorize-home');
 const openSettings = document.getElementById('open-settings');
+const supportedVersions = document.getElementById('supported-version');
+const switchVersion = document.getElementById('switch-version');
 let navigating = false;
 let starting = false;
 let authorizingHome = false;
@@ -67,6 +69,25 @@ async function open() {
       setTimeout(open, 2500);
       return;
     }
+    const selected = state.versions?.find(item => item.version === state.current);
+    if (selected?.supported === false) {
+      title.textContent = '当前 DSH 版本不受支持';
+      message.textContent = `${selected.unsupportedReason}。${state.isAdmin ? '可打开设置下载受支持版本。' : '请选择受支持版本；如无可用版本，请联系管理员下载。'}`;
+      const available = state.versions.filter(item => item.supported !== false);
+      const previous = supportedVersions.value;
+      supportedVersions.replaceChildren();
+      for (const item of available) {
+        const option = document.createElement('option');
+        option.value = item.version; option.textContent = item.version;
+        supportedVersions.append(option);
+      }
+      if (available.some(item => item.version === previous)) supportedVersions.value = previous;
+      supportedVersions.hidden = switchVersion.hidden = !available.length;
+      supportedVersions.disabled = switchVersion.disabled = !!state.busy || starting;
+      setTimeout(open, 2500);
+      return;
+    }
+    supportedVersions.hidden = switchVersion.hidden = true;
     if (!state.running) {
       message.textContent = state.error ? `DSH 尚未启动：${state.error}` : 'DSH 正在启动，请稍候…';
       if (!starting && !state.busy) {
@@ -116,5 +137,12 @@ async function authorizeUserHome() {
     message.textContent = `无法设置工作目录：${error.message}`;
   } finally { authorizingHome = false; }
 }
+switchVersion.addEventListener('click', async () => {
+  if (starting || !supportedVersions.value) return;
+  starting = true; switchVersion.disabled = true;
+  try { await api('activate', { version: supportedVersions.value }); }
+  catch (error) { message.textContent = `无法切换 DSH：${error.message}`; }
+  finally { starting = false; switchVersion.disabled = false; }
+});
 authorizeHome.addEventListener('click', authorizeUserHome);
 open();

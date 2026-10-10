@@ -7,11 +7,25 @@ import { readJson, writeJson } from '../shared/config.mjs';
 import { run } from '../shared/command.mjs';
 
 export const PACKAGE = '@deepseek-ai/dsh';
+export const MINIMUM_VERSION = '0.1.6';
+
+// Keep path validation separate: unsupported runtimes must remain removable.
+export function supportedVersion(version) {
+  exactVersion(version);
+  if (semver.lt(version, MINIMUM_VERSION)) throw new Error(`DSH 最低支持版本为 ${MINIMUM_VERSION}，不能使用 ${version}；旧版本会话文件格式不兼容，可能导致会话加载失败`);
+  return version;
+}
+export function versionAvailability(item) {
+  try { supportedVersion(item.version); return { ...item, supported: true, unsupportedReason: null }; }
+  catch (error) { return { ...item, supported: false, unsupportedReason: error.message }; }
+}
 
 // Downloads and install requests always use a complete semver, never a tag.
 // Tags are resolved to a precise version before this layer mutates disk state.
 export function exactVersion(version) {
-  if (typeof version !== 'string' || semver.valid(version) !== version) throw new Error('必须使用完整的 DSH 精确版本号');
+  const parsed = typeof version === 'string' ? semver.parse(version) : null;
+  const canonical = parsed && `${parsed.version}${parsed.build.length ? `+${parsed.build.join('.')}` : ''}`;
+  if (!parsed || canonical !== version) throw new Error('必须使用完整的 DSH 精确版本号');
   return version;
 }
 export class Versions {
@@ -29,15 +43,16 @@ export class Versions {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const items = [];
     for (const entry of await readdir(this.directory, { withFileTypes: true })) {
-      if (!entry.isDirectory() || semver.valid(entry.name) !== entry.name) continue;
+      if (!entry.isDirectory()) continue;
+      try { exactVersion(entry.name); } catch { continue; }
       const item = await readJson(path.join(this.directory, entry.name, 'installed.json'), null);
-      if (item?.version === entry.name) items.push(item);
+      if (item?.version === entry.name) items.push(versionAvailability(item));
     }
     return items.sort((a, b) => semver.rcompare(a.version, b.version));
   }
   async metadata(config, selector) {
     const data = await this.versionChecker.checkNow({ registry: config.registry, selector, signal: this.signal });
-    exactVersion(data.version);
+    supportedVersion(data.version);
     return data;
   }
   async check(config) {
@@ -48,7 +63,7 @@ export class Versions {
   }
   async install(config, version, onProgress = () => {}) {
     const report = progress => { try { onProgress(progress); } catch { /* UI progress must never fail an install */ } };
-    exactVersion(version);
+    supportedVersion(version);
     report({ step: 1, total: 4, stage: '解析版本信息' });
     if ((await this.list()).some(x => x.version === version)) {
       report({ step: 4, total: 4, stage: '版本已下载' });

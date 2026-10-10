@@ -5,7 +5,7 @@ import { access, copyFile, lstat, mkdir, readdir, readlink, rename, rm, rmdir, s
 import { loadConfig, readJson, writeJson } from '../shared/config.mjs';
 import { Manager } from './manager.mjs';
 import { DshProcess } from './process.mjs';
-import { Versions, exactVersion } from './versions.mjs';
+import { Versions, exactVersion, MINIMUM_VERSION, supportedVersion } from './versions.mjs';
 import { userAccessibleFolders } from './fnos-api.mjs';
 
 function validUid(uid) {
@@ -203,7 +203,7 @@ export class FleetManager {
   async userStatus(uid, isAdmin = false) {
     const homeAccess = await this.homeAccess(uid);
     if (!homeAccess.ready) return {
-      current: this.state.defaultVersion, running: false, busy: null, error: null, marketInstalled: false, versions: [],
+      current: this.state.defaultVersion, running: false, busy: null, error: null, marketInstalled: false, versions: [], minimumVersion: MINIMUM_VERSION,
       config: isAdmin ? this.config : undefined, releases: isAdmin ? this.releases : [], defaultVersion: this.state.defaultVersion,
       globalBusy: this.busy, globalError: this.error, globalTask: isAdmin ? this.globalTask : undefined,
       services: isAdmin ? this.runningServices() : undefined,
@@ -354,7 +354,7 @@ export class FleetManager {
   }
 
   async setDefault(version) {
-    exactVersion(version);
+    supportedVersion(version);
     if (!(await this.versions.list()).some(item => item.version === version)) throw new Error('该版本尚未安装');
     const current = path.join(this.root, 'runtimes/current');
     const temporary = `${current}.tmp`;
@@ -379,7 +379,7 @@ export class FleetManager {
     try {
       return await this.exclusive(labels[action], async () => {
         if (action === 'check') this.releases = await this.versions.check(this.config);
-        if (action === 'download') await this.versions.install(this.config, version, progress => { this.globalTask = { ...this.globalTask, ...progress }; });
+        if (action === 'download') await this.versions.install(this.config, supportedVersion(version), progress => { this.globalTask = { ...this.globalTask, ...progress }; });
         if (action === 'remove') await this.removeVersion(version);
         if (action === 'default') await this.setDefault(data.version);
       });

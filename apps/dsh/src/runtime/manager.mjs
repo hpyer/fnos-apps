@@ -2,7 +2,7 @@ import path from 'node:path';
 import { watch } from 'node:fs';
 import { chmod, copyFile, lstat, mkdir, readdir, rename, rm, rmdir, symlink, unlink, writeFile, readlink } from 'node:fs/promises';
 import { loadConfig, readJson, writeJson } from '../shared/config.mjs';
-import { Versions, exactVersion } from './versions.mjs';
+import { Versions, exactVersion, MINIMUM_VERSION, supportedVersion, versionAvailability } from './versions.mjs';
 import { DshProcess } from './process.mjs';
 import { run, redact } from '../shared/command.mjs';
 
@@ -126,7 +126,8 @@ export class Manager {
     return {
       config: this.config, current: this.state.current, running: !!this.process.child && !!this.process.address,
       busy: this.busy, error: this.error, marketInstalled: this.state.marketInstalled,
-      versions: await this.versions.list(), releases: this.releases,
+      minimumVersion: MINIMUM_VERSION,
+      versions: (await this.versions.list()).map(versionAvailability), releases: this.releases,
     };
   }
   async exclusive(label, action) {
@@ -157,6 +158,7 @@ export class Manager {
     });
   }
   async ensureMarket(version) {
+    supportedVersion(version);
     if (this.state.marketInstalled) return;
     // Use DSH's own profile-aware CLI instead of writing plugin files directly.
     const install = () => this.execute(process.execPath, [this.versions.entry(version), 'plugin', '--profile', 'web', 'add', 'dshmarket'], {
@@ -213,6 +215,7 @@ export class Manager {
     await this.save();
   }
   async startVersion(version) {
+    supportedVersion(version);
     if (this.stopping) throw new Error('应用正在停止');
     await this.ensureMarket(version);
     if (this.stopping) throw new Error('应用正在停止');
@@ -310,7 +313,7 @@ export class Manager {
     catch { /* manager.status() exposes the failure to the application UI */ }
   }
   async activate(version) {
-    exactVersion(version);
+    supportedVersion(version);
     if (!(await this.versions.list()).some(x => x.version === version)) throw new Error('该版本尚未安装');
     const previous = this.state.current;
     await this.stopRuntime();
@@ -348,7 +351,7 @@ export class Manager {
     return this.exclusive(labels[action], async () => {
       switch (action) {
         case 'check': this.releases = await this.versions.check(this.config); break;
-        case 'download': await this.versions.install(this.config, exactVersion(data.version)); break;
+        case 'download': await this.versions.install(this.config, supportedVersion(data.version)); break;
         case 'remove':
           if (exactVersion(data.version) === this.state.current) throw new Error('当前版本正在使用，无法删除');
           await this.versions.remove(data.version); break;
@@ -358,6 +361,7 @@ export class Manager {
           await this.activate(this.state.current); break;
         case 'market':
           if (!this.state.current) throw new Error('请先启用一个 DSH 版本');
+          supportedVersion(this.state.current);
           await this.stopRuntime();
           this.state.marketInstalled = false;
           await this.save();

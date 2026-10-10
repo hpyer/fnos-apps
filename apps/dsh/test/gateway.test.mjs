@@ -120,7 +120,10 @@ test('the DSH shell exposes authenticated status, restart, and settings navigati
   assert.match(shell, /M512\.085373 1024/);
   assert.match(shell, /location\.assign\('\/_fnos\/reopen'\)/);
   assert.match(shell, /运行中 · /);
-  assert.doesNotMatch(shell, /title=/);
+  // Icon buttons keep accessible labels without native title tooltips;
+  // unsupported version options may expose their reason through option.title.
+  assert.doesNotMatch(shell, /<button[^>]*\btitle=/);
+  assert.match(shell, /option\.title=item\.unsupportedReason/);
   assert.doesNotThrow(() => new Function(shell));
   const shellStyle = await fetch(`${f.url}/_fnos/shell.css?v=1.0.0`);
   const shellCss = await shellStyle.text();
