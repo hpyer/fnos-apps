@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FFmpeg for fnOS</title>
+  <link rel="stylesheet" href="./index.css">
+  <script type="module" src="./index.js"></script>
+</head>
+<body>
+  <main>
+    <section class="current" aria-labelledby="current-heading">
+      <div class="current-main">
+        <div class="current-copy"><div class="current-label"><h1 id="current-heading">当前版本</h1><span id="architecture" class="muted"></span></div><strong id="active-version">读取中</strong><p id="active-detail" class="muted">正在连接</p></div>
+        <div class="actions current-actions"><button id="diagnostics" type="button" disabled>构建信息</button><button id="rollback" type="button" disabled>回滚</button><button id="refresh" type="button">刷新</button></div>
+      </div>
+      <p id="connection" class="connection" role="status" hidden></p>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <details class="commands"><summary>命令路径</summary>
+        <div class="command-row"><span class="command-name">ffmpeg</span><code>/usr/local/bin/ffmpeg</code><span id="ffmpeg-state" class="muted"></span><button type="button" data-copy="/usr/local/bin/ffmpeg" aria-label="复制 ffmpeg 路径">复制</button></div>
+        <div class="command-row"><span class="command-name">ffprobe</span><code>/usr/local/bin/ffprobe</code><span id="ffprobe-state" class="muted"></span><button id="copy-probe" type="button" data-copy="/usr/local/bin/ffprobe" aria-label="复制 ffprobe 路径" disabled>复制</button></div>
+      </details>
+    </section>
+    <section class="panel" aria-labelledby="download-heading">
+      <div class="section-head"><h2 id="download-heading">安装版本</h2><button id="check" type="button" disabled>检查版本</button></div>
+      <div class="component-option"><label><input id="enable-probe" type="checkbox" aria-describedby="probe-hint" disabled>同时安装 ffprobe</label><p id="probe-hint" class="muted">自动补齐当前版本，后续同步；取消后保留已安装组件。</p></div>
+      <p id="available-empty" class="empty">检查可用版本后下载，安装完成后手动启用。</p>
+      <div id="available" class="download-row" hidden><label for="branch" class="sr-only">可用版本</label><select id="branch"></select><button id="install" type="button" class="primary">下载并安装</button><span id="build-detail" class="muted"></span></div>
+      <div id="operation" class="operation" role="status" aria-label="版本操作进度" hidden><div><span id="job-detail"></span><span id="download-size" class="muted"></span></div><progress id="progress" max="100" aria-label="下载进度"></progress></div>
+    </section>
+    <section class="panel installed" aria-labelledby="installed-heading">
+      <div class="section-head"><h2 id="installed-heading">已安装 <span id="count" class="count">0</span></h2></div>
+      <p id="installed-empty" class="empty" hidden>暂无版本</p>
+      <div id="version-list" class="version-list"></div>
+    </section>
+  </main>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-text"></p><div class="actions"><button id="cancel-confirm" type="button">取消</button><button id="accept-confirm" type="button" class="primary">确认</button></div></dialog>
+  <dialog id="diagnostics-dialog" aria-labelledby="diagnostics-title"><div class="section-head"><h2 id="diagnostics-title">构建信息</h2><button id="close-diagnostics" type="button">关闭</button></div><p class="muted">硬件加速的实际可用性取决于设备、驱动及调用者权限。</p><pre id="diagnostics-output"></pre></dialog>
+</body>
+</html>

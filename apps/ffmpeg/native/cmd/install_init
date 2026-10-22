@@ -1,0 +1,24 @@
+#!/bin/bash
+set -eu
+# Resource registration must never take over another package's command.
+for tool in ffmpeg ffprobe; do
+  file="/usr/local/bin/$tool"
+  if [ -e "$file" ] || [ -L "$file" ]; then
+    if [ -L "$file" ]; then
+      target=$(readlink "$file")
+      resolved=$(readlink -f "$file" 2>/dev/null || true)
+      case "$target" in
+        "/var/apps/ffmpeg-for-fnos/target/bin/$tool"|"${TRIM_APPDEST}/bin/$tool") continue ;;
+      esac
+      case "$resolved" in "${TRIM_APPDEST}/bin/$tool") continue ;; esac
+    fi
+    printf '命令冲突：%s 已由系统或其他应用占用，请先处理冲突后再安装。\n' "$file" >"${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+  fi
+done
+for tool in /usr/bin/xz /usr/bin/flock; do
+  if [ ! -x "$tool" ]; then
+    printf '缺少运行工具 %s，当前系统暂不支持此应用。\n' "$tool" >"${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+  fi
+done

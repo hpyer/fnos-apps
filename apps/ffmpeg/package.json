@@ -1,0 +1,16 @@
+{
+  "name": "@fnos/ffmpeg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@fnos/version-check": "workspace:*",
+    "@fnos/toast": "workspace:*"
+  },
+  "fnos": { "versionFile": "app/version" }
+}

@@ -1,0 +1,24 @@
+#!/bin/bash
+set -eu
+# Do not use TRIM_* or other caller-supplied variables to select executable code.
+ROOT=/var/apps/ffmpeg-for-fnos/var
+TOOL=${0##*/}
+case "$TOOL" in ffmpeg|ffprobe) ;; *) exit 126 ;; esac
+fail() { printf '%s\n' "$1" >&2; exit 127; }
+[ -r "$ROOT/catalog.lock" ] || fail '请先在 FFmpeg 管理页下载并启用一个版本。'
+exec 9<"$ROOT/catalog.lock"
+flock -s 9
+TARGET=$(readlink "$ROOT/current") || fail '尚未启用 FFmpeg 版本，请打开管理页。'
+[[ "$TARGET" =~ ^versions/[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$ ]] || fail 'FFmpeg 当前版本指针无效。'
+VERSION="$ROOT/$TARGET"
+[ -d "$VERSION" ] && [ ! -L "$VERSION" ] || fail 'FFmpeg 版本目录无效。'
+exec 8<"$VERSION/.use.lock"
+flock -s 8
+if [ "$TOOL" = ffprobe ] && [ ! -e "$VERSION/bin/ffprobe" ]; then
+  fail '当前版本未安装 ffprobe，请在管理页勾选「安装 ffprobe」。'
+fi
+[ -f "$VERSION/bin/$TOOL" ] && [ ! -L "$VERSION/bin/$TOOL" ] && [ -x "$VERSION/bin/$TOOL" ] || fail 'FFmpeg 可执行文件无效。'
+flock -u 9
+exec 9<&-
+# FD 8 holds this version's shared lock across exec. stdin, signals and exit status pass through.
+exec "$VERSION/bin/$TOOL" "$@"

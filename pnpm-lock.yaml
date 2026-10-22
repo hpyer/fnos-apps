@@ -30,6 +30,15 @@ importers:
         specifier: 7.7.3
         version: 7.7.3
 
+  apps/ffmpeg:
+    dependencies:
+      '@fnos/toast':
+        specifier: workspace:*
+        version: link:../../packages/toast
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
+
   apps/nginx:
     dependencies:
       '@fnos/version-check':

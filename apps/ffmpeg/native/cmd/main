@@ -1,0 +1,44 @@
+#!/bin/bash
+set -eu
+export PATH="/var/apps/nodejs_v24/target/bin:${PATH}"
+PID_FILE="${TRIM_PKGVAR}/manager.pid"
+ENTRY="${TRIM_APPDEST}/main.mjs"
+running() {
+  [ -r "$PID_FILE" ] || return 1
+  local pid
+  pid=$(cat "$PID_FILE")
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ -r "/proc/$pid/cmdline" ] || return 1
+  tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq "$ENTRY" || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+mkdir -p "${TRIM_PKGVAR}"
+case "${1:-}" in
+  start)
+    exec 9>"${TRIM_PKGVAR}/lifecycle.lock"
+    flock -x 9
+    running && exit 0
+    umask 077
+    nohup node "$ENTRY" >>"${TRIM_PKGVAR}/manager.log" 2>&1 9>&- &
+    echo "$!" > "$PID_FILE"
+    for i in {1..30}; do
+      kill -0 "$(cat "$PID_FILE")" 2>/dev/null || exit 1
+      if [ -S "${TRIM_APPDEST}/app.sock" ] && running; then exit 0; fi
+      sleep 1
+    done
+    kill -TERM "$(cat "$PID_FILE")" 2>/dev/null || true
+    exit 1
+    ;;
+  stop)
+    exec 9>"${TRIM_PKGVAR}/lifecycle.lock"
+    flock -x 9
+    if running; then
+      kill -TERM "$(cat "$PID_FILE")"
+      for i in {1..20}; do running || break; sleep 1; done
+      if running; then kill -KILL "$(cat "$PID_FILE")"; fi
+    fi
+    rm -f "$PID_FILE"
+    ;;
+  status) running && exit 0; exit 3 ;;
+  *) exit 1 ;;
+esac
