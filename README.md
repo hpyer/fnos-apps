@@ -38,10 +38,10 @@ pnpm run check dsh
 
 ```text
 apps/<slug>/             单个应用的源码、原生清单、测试和应用文档
+apps/<slug>/meta.env     应用发布元数据
 apps/<slug>/native/      fnOS manifest、入口、权限、向导和资源
 apps/<slug>/docs/        应用架构、验收与运行说明
 scripts/                 通用脚手架、构建、打包、发布与 fnpack 安装器
-scripts/apps/<slug>/     应用发布元数据
 docs/                    workspace 通用开发与发布文档
 .github/workflows/       CI、应用标签发布及可复用双架构构建
 ```

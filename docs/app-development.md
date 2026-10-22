@@ -16,7 +16,7 @@ fnOS 应用窗口本身已显示应用图标和标题，主体界面不要再重
 
 开发新功能时先查看 `packages/*` 中是否有可复用的公共能力。应用可以通过 pnpm workspace 依赖使用公共包，但构建时必须将实际使用的代码、样式和其他运行资源打入本应用的 FPK；安装后的应用不能依赖仓库中的 workspace、其他应用或未打包的公共包文件。打包前应检查构建产物是否包含这些资源。
 
-应用专属元数据位于 `scripts/apps/<slug>/meta.env`：
+应用专属元数据与源码一起保存在 `apps/<slug>/meta.env`：
 
 ```dotenv
 APP_ID=my-app
@@ -27,6 +27,8 @@ FILE_PREFIX=my-app
 RELEASE_TITLE="我的应用"
 SUPPORTED_ARCH="x86 arm"
 ```
+
+`meta.env` 定义应用 ID、workspace 包名、展示名称、标签前缀、文件前缀、发布标题和支持架构。本地 Node 脚本和 GitHub Actions 共用这份配置；Actions 会通过 Bash `source` 读取，所以带空格的值必须使用双引号。`scripts/` 只保留通用工具，不维护应用专属目录。
 
 每个应用还必须在 `apps/<slug>/CHANGELOG.md` 维护面向用户的变更记录。发布版本必须存在非空的 `## [版本]` 条目；`pnpm run check <slug>` 会验证它，GitHub Release 会直接使用该条目作为 Release Notes。
 

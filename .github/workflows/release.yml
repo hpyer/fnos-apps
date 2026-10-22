@@ -58,7 +58,7 @@ jobs:
             [ -z "$REVISION" ] || TAG="${TAG}-r${REVISION}"
           fi
           test -d "apps/$APP"
-          test -f "scripts/apps/$APP/meta.env"
+          test -f "apps/$APP/meta.env"
           node scripts/release.mjs check "$APP" --version "$VERSION" --tag "$TAG"
           echo "app=$APP" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

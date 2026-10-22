@@ -184,7 +184,7 @@ pnpm run create demo "示例应用" 8080
 pnpm run create --app demo --name "示例应用" --port 8080
 ```
 
-`<slug>` 只能包含小写字母、数字和连字符；端口必须是 2 至 5 位数字，省略时默认为 `8080`。脚手架会创建 `apps/<slug>`、`scripts/apps/<slug>/meta.env`、基础原生清单和变更日志，并执行 `pnpm install --lockfile-only` 将新 workspace 写入锁文件。
+`<slug>` 只能包含小写字母、数字和连字符；端口必须是 2 至 5 位数字，省略时默认为 `8080`。脚手架会创建 `apps/<slug>`，并在其中生成 `meta.env`、基础原生清单和变更日志，再执行 `pnpm install --lockfile-only` 将新 workspace 写入锁文件。
 
 创建后即可使用通用命令：
 

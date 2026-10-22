@@ -36,8 +36,8 @@ jobs:
           set -euo pipefail
           APP='${{ inputs.app }}'
           test -d "apps/$APP"
-          test -f "scripts/apps/$APP/meta.env"
-          source "scripts/apps/$APP/meta.env"
+          test -f "apps/$APP/meta.env"
+          source "apps/$APP/meta.env"
           arches='[]'
           for arch in ${SUPPORTED_ARCH:-x86}; do
             case "$arch" in

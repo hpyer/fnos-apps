@@ -34,7 +34,7 @@ export async function resolveApp(slug) {
   const appDir = path.join(root, 'apps', slug);
   const manifestPath = path.join(appDir, 'native', 'manifest');
   const packagePath = path.join(appDir, 'package.json');
-  const metaPath = path.join(root, 'scripts', 'apps', slug, 'meta.env');
+  const metaPath = path.join(appDir, 'meta.env');
   const [manifestSource, packageSource, metaSource] = await Promise.all([
     readFile(manifestPath, 'utf8'),
     readFile(packagePath, 'utf8'),

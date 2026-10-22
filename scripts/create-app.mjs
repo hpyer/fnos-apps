@@ -12,7 +12,6 @@ if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) throw new Error('app-slug 只能包含�
 if (!/^\d{2,5}$/.test(port)) throw new Error('默认端口必须是数字');
 
 const appDir = path.join(root, 'apps', slug);
-const metaDir = path.join(root, 'scripts', 'apps', slug);
 await access(appDir).then(() => { throw new Error(`应用目录已存在：${appDir}`); }).catch((error) => {
   if (error.code !== 'ENOENT') throw error;
 });
@@ -21,7 +20,7 @@ await Promise.all([
   mkdir(path.join(appDir, 'native', 'cmd'), { recursive: true }),
   mkdir(path.join(appDir, 'native', 'config'), { recursive: true }),
   mkdir(path.join(appDir, 'native', 'ui'), { recursive: true }),
-  mkdir(metaDir, { recursive: true }),
+  mkdir(path.join(appDir, 'native', 'wizard'), { recursive: true }),
 ]);
 
 async function write(relativePath, content, mode) {
@@ -90,7 +89,7 @@ await write('native/wizard/install', `[{
   "items": [{ "type": "text", "field": "app_port", "label": "访问端口", "initValue": "${port}" }]
 }]\n`);
 await write('README.md', `# ${displayName}\n\n构建：pnpm run build ${slug}\n打包：pnpm run pack ${slug} --all\n`);
-await writeFile(path.join(metaDir, 'meta.env'), `APP_ID=${slug}\nPACKAGE_NAME=@fnos/${slug}\nDISPLAY_NAME="${displayName}"\nTAG_PREFIX=${slug}\nFILE_PREFIX=${slug}\nRELEASE_TITLE="${displayName}"\nSUPPORTED_ARCH="x86 arm"\n`);
+await write('meta.env', `APP_ID=${slug}\nPACKAGE_NAME=@fnos/${slug}\nDISPLAY_NAME="${displayName}"\nTAG_PREFIX=${slug}\nFILE_PREFIX=${slug}\nRELEASE_TITLE="${displayName}"\nSUPPORTED_ARCH="x86 arm"\n`);
 const install = spawnSync('pnpm', ['install', '--lockfile-only'], { cwd: root, stdio: 'inherit' });
 if (install.error) throw install.error;
 if ((install.status ?? 1) !== 0) process.exit(install.status ?? 1);
