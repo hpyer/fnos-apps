@@ -1352,7 +1352,7 @@ function wireSideControls() {
     const enabled = event.target.checked;
     setInputs(systemProxyInputs, enabled);
     for (const item of systemProxyInputs) item.disabled = true;
-    const result = await privilegedAct(async password => post('settings/system-proxy', { enabled, password }), '', { silent: true });
+    const result = await privilegedAct(async password => post('settings/system-proxy', { enabled, password }), '');
     for (const item of systemProxyInputs) item.disabled = false;
     await refreshStatus();
     if (result) notify(enabled ? (result.environment?.systemProxy ? '系统代理已开启' : '已记录，启动 Core 后自动开启') : '系统代理已关闭', 'success');
@@ -1361,7 +1361,7 @@ function wireSideControls() {
     const enabled = event.target.checked;
     setInputs(tunInputs, enabled);
     for (const item of tunInputs) item.disabled = true;
-    const result = await privilegedAct(async password => post('settings/tun', { enabled, password }), '', { silent: true });
+    const result = await privilegedAct(async password => post('settings/tun', { enabled, password }), '');
     for (const item of tunInputs) item.disabled = false;
     await refreshStatus();
     if (result) notify(enabled ? (result.environment?.tunActive ? '增强模式已开启' : '已记录，启动 Core 后自动开启') : '增强模式已关闭', 'success');
