@@ -15,14 +15,32 @@ importers:
         specifier: 11.22.0
         version: 11.22.0
 
-  apps/dsh:
+  apps/clash:
     dependencies:
-      '@fnos/version-check':
-        specifier: workspace:*
-        version: link:../../packages/version-check
       '@fnos/toast':
         specifier: workspace:*
         version: link:../../packages/toast
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
+      '@noble/ciphers':
+        specifier: ^1.3.0
+        version: 1.3.0
+      '@noble/curves':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
+
+  apps/dsh:
+    dependencies:
+      '@fnos/toast':
+        specifier: workspace:*
+        version: link:../../packages/toast
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
       '@trimjs/web-app':
         specifier: 0.4.2
         version: 0.4.2
@@ -41,21 +59,21 @@ importers:
 
   apps/nginx:
     dependencies:
-      '@fnos/version-check':
-        specifier: workspace:*
-        version: link:../../packages/version-check
       '@fnos/toast':
         specifier: workspace:*
         version: link:../../packages/toast
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
 
   apps/xterm:
     dependencies:
-      '@fnos/version-check':
-        specifier: workspace:*
-        version: link:../../packages/version-check
       '@fnos/toast':
         specifier: workspace:*
         version: link:../../packages/toast
+      '@fnos/version-check':
+        specifier: workspace:*
+        version: link:../../packages/version-check
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0
@@ -72,13 +90,13 @@ importers:
         specifier: 8.21.3
         version: 8.21.3
 
+  packages/toast: {}
+
   packages/version-check:
     dependencies:
       '@fnos/toast':
         specifier: workspace:*
         version: link:../toast
-
-  packages/toast: {}
 
 packages:
 
@@ -238,6 +256,18 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@noble/ciphers@1.3.0':
+    resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/curves@1.9.0':
+    resolution: {integrity: sha512-7YDlXiNMdO1YZeH6t/kvopHHbIZzlxrCV9WLqCY6QhcXOoXiNCMDqJIglZ9Yjx5+w7Dz30TITFrlTjnRg7sKEg==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
+
   '@trimjs/web-app@0.4.2':
     resolution: {integrity: sha512-apVkaOCIPjC/8hOBcr2FiaYhGGQwnf8wxZTrGDnA8o64t+nlfLpyC8Tv1zyTvx9ZbAns8RnkSJ0kZcHRITTOkA==}
 
@@ -363,6 +393,14 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.12':
     optional: true
+
+  '@noble/ciphers@1.3.0': {}
+
+  '@noble/curves@1.9.0':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@trimjs/web-app@0.4.2': {}
 
