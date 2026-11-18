@@ -4,8 +4,10 @@ import { watchAppUpdates } from '@fnos/version-check/client';
 const BASE = '/app/nginx-for-fnos';
 const $ = id => document.getElementById(id);
 let selected = '', status = null, latest = null;
-function notify(content, type = 'info', duration = 3000) {
-  return toast({ content, type, duration, container: document.querySelector('dialog[open]') || document.body });
+function notify(content, type = 'info', duration) {
+  const options = { content, type, container: document.querySelector('dialog[open]') || document.body };
+  if (duration !== undefined) options.duration = duration;
+  return toast(options);
 }
 async function api(action, input = {}) {
   const response = await fetch(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) });

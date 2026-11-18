@@ -1,12 +1,14 @@
 const TITLES = { info: '提示', success: '成功', warning: '警告', error: '错误' };
+const DEFAULT_DURATIONS = { info: 3000, success: 2000, warning: 4000, error: 4000 };
 const POSITIONS = new Set(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'center']);
 const hosts = new WeakMap();
 
 /** Show a toast. Import @fnos/toast/style.css in the app's stylesheet. */
-export function toast({ title, content = '', link, type = 'info', position = 'top-right', duration = 3000, container = document.body } = {}) {
+export function toast({ title, content = '', link, type = 'info', position = 'top-right', duration, container = document.body } = {}) {
   if (!Object.hasOwn(TITLES, type)) throw new TypeError(`Unknown toast type: ${type}`);
   if (!POSITIONS.has(position)) throw new TypeError(`Unknown toast position: ${position}`);
-  if (!Number.isFinite(duration) || duration < 0) throw new TypeError('Toast duration must be a non-negative number');
+  const timeout = duration === undefined ? DEFAULT_DURATIONS[type] : duration;
+  if (!Number.isFinite(timeout) || timeout < 0) throw new TypeError('Toast duration must be a non-negative number');
   const linkURL = link ? new URL(link.href) : null;
   if (linkURL && linkURL.protocol !== 'https:') throw new TypeError('Toast link must use HTTPS');
 
@@ -55,7 +57,7 @@ export function toast({ title, content = '', link, type = 'info', position = 'to
   item.append(icon, body, dismiss);
   host.append(item);
 
-  let timer, startedAt, remaining = duration, closed = false;
+  let timer, startedAt, remaining = timeout, closed = false;
   function close() {
     if (closed) return;
     closed = true;
@@ -74,7 +76,7 @@ export function toast({ title, content = '', link, type = 'info', position = 'to
     remaining = Math.max(0, remaining - (performance.now() - startedAt));
   }
   function resume() {
-    if (closed || !duration || timer) return;
+    if (closed || !timeout || timer) return;
     startedAt = performance.now();
     timer = setTimeout(close, remaining);
   }

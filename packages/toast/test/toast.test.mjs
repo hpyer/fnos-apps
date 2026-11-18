@@ -39,7 +39,7 @@ test('toast defaults, hover pause, custom title and manual close', () => {
     advance(5000);
     assert.equal(host.childElementCount, 1);
     item.dispatch('mouseleave');
-    advance(1999);
+    advance(2999);
     assert.equal(host.childElementCount, 1);
     advance(1);
     assert.equal(body.childElementCount, 0);
@@ -67,6 +67,49 @@ test('toast defaults, hover pause, custom title and manual close', () => {
     const info = toast({ content: '普通消息' });
     assert.equal(body.children[0].children[0].children[1].children[0].textContent, '提示');
     info.close();
+  } finally {
+    Object.assign(globalThis, original);
+  }
+});
+
+test('success/error/warning default durations and independent timers', () => {
+  const original = { document: globalThis.document, performance: globalThis.performance, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+  let now = 0, nextId = 0;
+  const timers = new Map();
+  const body = new Element();
+  globalThis.document = { body, activeElement: null, createElement: () => new Element() };
+  globalThis.performance = { now: () => now };
+  globalThis.setTimeout = (callback, delay) => { const id = ++nextId; timers.set(id, { callback, due: now + delay }); return id; };
+  globalThis.clearTimeout = id => timers.delete(id);
+  function advance(ms) {
+    now += ms;
+    for (const [id, timer] of [...timers]) if (timer.due <= now) { timers.delete(id); timer.callback(); }
+  }
+  try {
+    const success = toast({ type: 'success', content: 'ok' });
+    const error = toast({ type: 'error', content: 'bad' });
+    const warning = toast({ type: 'warning', content: 'warn' });
+    const host = body.children[0];
+    assert.equal(host.childElementCount, 3);
+
+    advance(1999);
+    assert.equal(host.childElementCount, 3);
+    advance(1);
+    assert.equal(host.childElementCount, 2);
+
+    const errorItem = host.children[0];
+    errorItem.dispatch('mouseenter');
+    advance(5000);
+    assert.equal(host.childElementCount, 1);
+    errorItem.dispatch('mouseleave');
+    advance(1999);
+    assert.equal(host.childElementCount, 1);
+    advance(1);
+    assert.equal(body.childElementCount, 0);
+
+    error.close();
+    warning.close();
+    success.close();
   } finally {
     Object.assign(globalThis, original);
   }
