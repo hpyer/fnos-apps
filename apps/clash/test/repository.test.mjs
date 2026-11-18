@@ -34,19 +34,20 @@ test('解析稳定版发布，仅接受官方资产名与 SHA256', () => {
   assert.equal(x86.id, 'metacubex-stable-v1.19.33-x86_64');
   assert.equal(x86.version, 'v1.19.33');
   assert.equal(x86.sha256, SHA_X86);
-  assert.equal(x86.size, 22862419);
+  assert.equal(x86.size, 19000000);
+  assert.equal(x86.name, 'mihomo-linux-amd64-compatible-v1.19.33.gz');
   assert.equal(x86.verified, true);
   assert.equal(entries.find(item => item.arch === 'arm64').id, 'metacubex-stable-v1.19.33-arm64');
 });
 
 test('拒绝没有上游 SHA256 或来源不在允许地址的资产', () => {
   const missingDigest = structuredClone(RELEASE);
-  delete missingDigest.assets[0].digest;
+  delete missingDigest.assets[2].digest;
   const entries = parseRelease(missingDigest, 'metacubex-stable');
   assert.equal(entries.find(item => item.arch === 'x86_64').verified, false);
   assert.equal(entries.find(item => item.arch === 'arm64').verified, true);
   const wrongHost = structuredClone(RELEASE);
-  wrongHost.assets[0].browser_download_url = 'https://evil.example/mihomo.gz';
+  wrongHost.assets[2].browser_download_url = 'https://evil.example/mihomo.gz';
   assert.equal(parseRelease(wrongHost, 'metacubex-stable').length, 1);
   assert.equal(parseRelease({ ...RELEASE, prerelease: true }, 'metacubex-stable').length, 0);
 });

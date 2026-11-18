@@ -105,8 +105,11 @@ export function parseRelease(release, channelId) {
   if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name || '') || release.prerelease) return [];
   const version = release.tag_name.slice(1);
   for (const [arch, token] of Object.entries(archPattern)) {
-    const name = `mihomo-linux-${token}-${release.tag_name}.gz`;
-    const asset = (Array.isArray(release.assets) ? release.assets : []).find(item => item.name === name);
+    const names = arch === 'x86_64'
+      ? [`mihomo-linux-amd64-compatible-${release.tag_name}.gz`, `mihomo-linux-amd64-${release.tag_name}.gz`]
+      : [`mihomo-linux-${token}-${release.tag_name}.gz`];
+    const assets = Array.isArray(release.assets) ? release.assets : [];
+    const asset = names.map(name => assets.find(item => item.name === name)).find(Boolean);
     if (!asset) continue;
     const entry = assetEntry({ channel, asset, arch, version, tag: release.tag_name, commit: '', publishedAt: release.published_at, prerelease: false });
     if (entry) entries.push(entry);
@@ -244,7 +247,10 @@ export class CoreRepository {
     for (const tag of selected) {
       const version = tag.slice(1);
       for (const [arch, token] of Object.entries(archToken)) {
-        entries.push(this.fallbackEntry(channel, { tag, version, arch, name: `mihomo-linux-${token}-${tag}.gz` }));
+        const name = arch === 'x86_64'
+          ? `mihomo-linux-amd64-compatible-${tag}.gz`
+          : `mihomo-linux-${token}-${tag}.gz`;
+        entries.push(this.fallbackEntry(channel, { tag, version, arch, name }));
       }
     }
     if (!entries.length) fail('备用版本来源未找到稳定版本', 404);

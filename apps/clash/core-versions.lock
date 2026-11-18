@@ -9,10 +9,10 @@
   "checkedAt": "2026-11-18",
   "assets": {
     "x86_64": {
-      "name": "mihomo-linux-amd64-v1.19.34.gz",
-      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-amd64-v1.19.34.gz",
-      "sha256": "223fab877e5795ce780ba39902e5f0b1113c1256ae244a7160f1165e017e9ccc",
-      "size": 22731319,
+      "name": "mihomo-linux-amd64-compatible-v1.19.34.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-amd64-compatible-v1.19.34.gz",
+      "sha256": "2763f5b414527f7baf6dc57e3f82f3ab561eedf34bfd7c2f2cde1f7e592efe06",
+      "size": 22766457,
       "elfMachine": 62
     },
     "arm64": {
