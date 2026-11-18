@@ -46,6 +46,7 @@ async function exists(file) {
 }
 
 async function download(url, destination, { retries = 3 } = {}) {
+  await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const temporary = `${destination}.part`;
