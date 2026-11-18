@@ -9,6 +9,8 @@ Node.js 管理服务（clash_for_fnos）
 ├── server.mjs           静态页面、REST API、SSE
 ├── manager.mjs          Core 生命周期、版本槽位、配置应用、订阅调度
 ├── config-service.mjs   配置备份/校验/原子写入、订阅下载与掩码
+├── config-template.mjs  默认配置模板与纯节点列表订阅的补齐
+├── progress.mjs         首次准备/配置应用的分步进度与字节进度
 ├── controller-client.mjs mihomo Controller 客户端（Unix Socket）
 ├── core-process.mjs     受控子进程与日志转发
 ├── repository.mjs       渠道/发布资产解析与 SHA256 元数据
@@ -27,8 +29,10 @@ mihomo 子进程（当前激活槽位）
 - `native/cmd/main` 只管理 Node 管理进程，通过 PID 和 `/proc/<pid>/cmdline` 匹配确认身份；`stop` 先发送 SIGTERM，超时后 SIGKILL。卸载/升级前先停止管理服务，管理服务退出时停止 Core。
 - `main.mjs` 只接受应用用户运行（非 dev 模式下拒绝 root），从 `TRIM_PKGVAR` 读取私有数据目录，通过 `TRIM_APPDEST/app.sock` 暴露页面。
 - `CoreProcess` 使用 `spawn(binary, args, { shell: false })` 启动 mihomo，参数固定为 `-d <runtime> -f <runtime/config.yaml>`。标准输出/错误按行进入日志中心；意外退出时按 `autoRestart` 设置退避重启，最多 5 次，成功启动后计数清零。
-- 启动前依次：读取当前 Core 槽位 → 校验文件哈希和 ELF 架构 → 执行 `-v` 版本探测 → 检查代理端口占用 → 写入注入 Controller 的运行时配置 → `mihomo -t` 校验 → 启动并轮询 Controller `/version`（最长 15 秒）。任一步失败都会保留原状态并返回明确错误。
+- 启动前依次：读取当前 Core 槽位 → 校验文件哈希和 ELF 架构 → 执行 `-v` 版本探测 → 检查代理端口占用 → 写入注入 Controller 的运行时配置 → 补齐 GeoIP/GeoSite/Smart 模型 → `mihomo -t` 校验 → 启动并轮询 Controller `/version`（最长 15 秒）。任一步失败都会保留原状态并返回明确错误。
+- 首次启动、校验或应用配置时，`progress.mjs` 记录「校验内核 / 准备外部数据 / 校验配置 / 启动内核」等阶段，下载外部数据时按 `content-length` 上报已接收字节；`GET /api/preparation` 与 `status.preparation` 暴露快照，页面在长操作期间按约 1 秒轮询，并在右下角浮动显示进度卡片（移动端位于底部导航上方），避免只看到「启动中」，同时不挤占配置页布局。同一时刻只有一条准备会话，嵌套调用（应用配置里的校验、启动）复用外层步骤，步骤只前进不回退。
 - 概览内存优先读取 Controller `/memory`，不可用时读取 Core 进程 `/proc/<pid>/status` 的 VmRSS，避免只显示“—”。
+- 所有出站请求（订阅下载、外部数据下载、Core 版本检查/下载、应用更新检查）统一经过 `manager.githubFetcher()`/repository 的 fetch 包装：`withUserAgent()` 移除调用方自带的 `user-agent`，写入由 `Mihomo/<内核版本>; ClashForFNOS/<应用版本>` 前缀加用户自定义后缀（默认 `clash.meta; clash`）组成的完整 User-Agent；前缀随内核切换和启动自动刷新，设置页展示生成的前缀。
 - 日志中心对 Controller secret、`secret/password/token` 字段和 URL 查询参数脱敏；`logs/manager.log` 达到 2 MiB 时轮转为 `manager.log.1`。生命周期脚本另将管理进程标准输出写入 `logs/stdout.log`，避免与结构化日志并发写同一文件。
 
 ## Core 版本槽位
@@ -43,7 +47,9 @@ mihomo 子进程（当前激活槽位）
 
 ## 配置与订阅
 
-- 用户配置保存在 `config/config.yaml`，写入前执行 `mihomo -t`；保存时先校验、再备份（保留最近 10 份，可手动删除），写入失败或应用失败会回滚配置并恢复原 Core。`external-controller*`、`external-ui*`、`secret`、`log-level`、`mixed-port`、`port`、`socks-port` 和 `allow-lan` 由应用接管并在运行时配置中重写；配置页会列出这些被接管的字段。
+- 用户配置保存在 `config/config.yaml`，写入前执行 `mihomo -t`；保存时先校验、再备份（保留最近 10 份，可手动删除），写入失败或应用失败会回滚配置并恢复原 Core。校验会先补齐配置所需的外部数据（内置 Geo 数据优先复制，缺失时才下载），因此首次校验/应用可能触发下载并显示进度。`external-controller*`、`external-ui*`、`secret`、`log-level`、`mixed-port`、`port`、`socks-port` 和 `allow-lan` 由应用接管并在运行时配置中重写；配置页会列出这些被接管的字段。
+- 默认配置（`config-template.mjs`）包含占位的 `proxy-providers → 默认订阅`、`节点选择`（select）与 `自动选择`（url-test）分组，以及私网/国内直连、`MATCH,节点选择` 规则；provider 的 `url` 默认留空（注释提示「填入你的订阅链接」），空链接通过结构校验、启动时立即本地失败而不会发起真实下载。`GET /api/config/template` 返回同一模板，供已有配置「载入模板」。
+- 应用订阅时，如果内容只有 `proxies` 而没有 `proxy-groups` 或 `rules`（机场的「节点列表」格式，空的 `[]` 也视为缺失），`augmentSubscriptionConfig()` 会补充同样的分组和基础规则，并在返回结果中标记 `augmented`；完整配置不会改写。
 - 运行时配置不直接使用用户文件：`yaml.mjs` 只解析顶层字段，删除 `external-controller*`、`external-ui*`、`secret`、`log-level` 以及托管的端口/allow-lan，再追加私有 Unix Socket、随机 secret、日志级别和设置页中的网络参数。JSON 配置同样支持。嵌套结构不做解释，语法语义仍由 `mihomo -t` 判定。
 - 订阅支持 HTTP/HTTPS（HTTP 为明文，建议 HTTPS），下载前解析域名并拒绝回环、RFC1918、链路本地和 CGNAT 地址（SSRF 防护），重定向逐跳复核；`198.18.0.0/15`（benchmark/fake-ip 保留段）不视为内网服务。内容上限 8 MiB 且必须是可识别的 Clash 配置。自动更新只下载内容，应用动作由用户确认；下载失败按间隔退避重试（记录 attemptedAt）。
 - 配置备份、订阅内容和 Core 元数据均为 `0600`，目录为 `0700`；GeoIP/GeoSite 等外部数据由设置页下载到 `runtime/`；首次启动自动补齐 Core 所需数据。
@@ -68,5 +74,7 @@ mihomo 子进程（当前激活槽位）
 
 - 首次启动释放内置 Core 需要约 60 MB 临时磁盘；每个 FPK 只包含目标架构的 Core，GeoIP/GeoSite/ASN/Model 在安装后下载。
 - `api.github.com` 未认证请求受 IP 速率限制；内置 Core 和已安装版本不受影响。
+- 默认配置中的 provider `url` 默认为空，未填入时该提供商为空、`节点选择` 仍可直接使用 DIRECT；首次准备外部数据的耗时取决于 GitHub 与加速地址的实际速度，界面只展示进度，不能预先估算总时长。
+- 订阅只有节点列表时自动补齐的分组和规则是通用模板，不会根据机场节点做筛选或测速排序。
 - 升级会替换 `app/cores`，但不会删除私有数据；`cores/active.json` 指向已不存在的内置版本时自动回退到新内置版本。
 - 应用停止时是否保留资源链接、升级/卸载清理顺序、端口占用、跨账户访问和资源占用必须在 x86_64、ARM64 实机验收。
