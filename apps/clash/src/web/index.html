@@ -108,6 +108,11 @@
           <div id="node-providers" class="provider-list"><p class="empty">Core 运行后加载节点</p></div>
         </article>
 
+        <article id="local-nodes-card" class="card" hidden>
+          <div class="card-head"><div><h2>配置节点</h2><p class="muted">配置 proxies 中直接定义的节点（非代理提供商）</p></div><div class="actions"><span id="local-nodes-count" class="muted"></span><button id="toggle-local-nodes" type="button">展开</button></div></div>
+          <div id="local-node-grid" class="node-grid" hidden></div>
+        </article>
+
         <article class="card">
           <div class="card-head"><div><h2>策略组</h2><p class="muted">点击策略组展开节点并切换出口</p></div><div class="actions"><button id="toggle-groups" type="button">全部展开</button></div></div>
           <div id="group-list" class="group-list"></div>
@@ -123,11 +128,13 @@
         <article class="card editor-card">
           <div class="card-head"><div><h2>当前运行配置</h2><p id="config-meta" class="muted">—</p></div><div class="actions"><button id="refresh-config" type="button">重新载入</button></div></div>
           <p id="config-managed-hint" class="managed-hint" hidden></p>
+          <p id="config-data-hint" class="managed-hint data-hint" hidden></p>
           <textarea id="config-source" spellcheck="false" aria-label="Clash 配置内容" placeholder="mixed-port: 7890&#10;mode: rule&#10;proxies: []&#10;rules:&#10;  - MATCH,DIRECT"></textarea>
           <div class="editor-actions">
             <span class="muted">保存前自动校验，无变动不会新增备份</span>
             <input id="import-config" type="file" accept=".yaml,.yml,.txt,text/yaml,text/plain" hidden>
-            <button id="import-config-button" type="button">导入文件</button>
+            <button id="load-template-config" type="button" title="载入默认配置模板，按注释替换订阅链接后保存">载入模板</button>
+            <button id="import-config-button" type="button" title="从当前浏览器所在设备选择配置文件">导入文件</button>
             <button id="validate-config" type="button">校验</button>
             <button id="save-config" type="button" class="primary">保存并应用</button>
           </div>

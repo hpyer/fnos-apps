@@ -3,6 +3,7 @@ import { readFile, readdir, rm, stat } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { fail } from './errors.mjs';
+import { defaultConfig } from './config-template.mjs';
 import { downloadText } from './download.mjs';
 import { maskUrl } from './redact.mjs';
 import { atomicJSON, atomicWrite, ensureDir, readJSON, safeId } from './storage.mjs';
@@ -11,26 +12,9 @@ import { configInfo, injectController, looksJSON, setTopLevel, validateConfigSou
 const SUBSCRIPTION_URL_MAX = 2048;
 const NAME_MAX = 60;
 const BACKUP_KEEP = 10;
-const DEFAULT_PORT = 7890;
 const BACKUP_NAME = /^[0-9T-]+-[a-z0-9-]+\.yaml$/i;
 
-export function defaultConfig() {
-  return [
-    '# Clash for fnOS 托管配置',
-    '# 可在此编辑或从订阅应用配置；保存前会使用 mihomo -t 校验，失败自动回滚。',
-    `mixed-port: ${DEFAULT_PORT}`,
-    'allow-lan: false',
-    'bind-address: "*"',
-    'mode: rule',
-    'log-level: info',
-    'ipv6: false',
-    'proxies: []',
-    'proxy-groups: []',
-    'rules:',
-    '  - MATCH,DIRECT',
-    '',
-  ].join('\n');
-}
+export { defaultConfig };
 
 export function normalizeSubscriptionName(value) {
   if (typeof value !== 'string') fail('订阅名称无效');

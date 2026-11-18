@@ -136,16 +136,21 @@ export function proxyProviders(source) {
   const baseIndent = Math.min(...block.map(item => item.indent));
   const providers = [];
   let current = null;
+  let propertyIndent = null;
   for (const item of block) {
     const text = item.line.trim();
     if (item.indent === baseIndent) {
       const match = /^(.+?)\s*:\s*(.*)$/.exec(text);
       if (!match) continue;
       current = { name: unquote(match[1]), type: '', interval: 0 };
+      propertyIndent = null;
       const inline = /type\s*:\s*([^,}\s]+)/.exec(match[2]);
       if (inline) current.type = unquote(inline[1]);
       providers.push(current);
     } else if (current) {
+      // Only direct children define provider options; health-check.interval etc. stay nested.
+      if (propertyIndent === null) propertyIndent = item.indent;
+      if (item.indent !== propertyIndent) continue;
       const match = /^(type|interval)\s*:\s*(.*)$/.exec(text);
       if (!match) continue;
       if (match[1] === 'type') current.type = unquote(match[2]);
@@ -153,6 +158,60 @@ export function proxyProviders(source) {
     }
   }
   return providers.filter(item => item.name);
+}
+
+/** Names of proxies defined directly in the config (proxy-providers are separate). */
+export function directProxies(source) {
+  if (looksJSON(source)) {
+    const value = parseJSONSource(source);
+    if (!Array.isArray(value.proxies)) return [];
+    return value.proxies
+      .map(item => (item && typeof item === 'object' ? item.name : ''))
+      .filter(name => typeof name === 'string' && name.trim())
+      .map(name => name.trim());
+  }
+  const { lines, entries } = splitTopLevel(source);
+  const entry = entries.find(item => item.key === 'proxies');
+  if (!entry) return [];
+  const raw = entry.raw.trim();
+  if (raw.startsWith('[')) {
+    const names = [];
+    const pattern = /\bname\s*:\s*(?:"([^"]+)"|'([^']+)'|([^,}\]]+))/g;
+    let match;
+    while ((match = pattern.exec(raw))) {
+      const name = (match[1] ?? match[2] ?? match[3] ?? '').trim();
+      if (name) names.push(name);
+    }
+    return names;
+  }
+  if (raw && !raw.startsWith('#')) return [];
+  const block = [];
+  for (let index = entry.index + 1; index < entry.end; index += 1) {
+    const line = lines[index];
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    block.push({ line, indent: /^\s*/.exec(line)[0].length });
+  }
+  if (!block.length) return [];
+  const baseIndent = Math.min(...block.map(item => item.indent));
+  const names = [];
+  for (const item of block) {
+    if (item.indent !== baseIndent) continue;
+    const text = item.line.trim();
+    if (!text.startsWith('-')) continue;
+    const rest = text.slice(1).trim();
+    const inline = /^name\s*:\s*(.+)$/.exec(rest);
+    if (inline) {
+      const name = unquote(inline[1]);
+      if (name) names.push(name);
+      continue;
+    }
+    if (rest.startsWith('{')) {
+      const match = /name\s*:\s*(?:"([^"]+)"|'([^']+)'|([^,}]+))/.exec(rest);
+      const name = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim();
+      if (name) names.push(name);
+    }
+  }
+  return names;
 }
 
 export function configInfo(source) {
@@ -303,6 +362,28 @@ export function setTunEnabled(source, enabled, { interfaceName = '', excludeUid 
   }
   const result = `${lines.join('\n').replace(/\s+$/, '')}\n`;
   return interfaceName ? setTopLevel(result, 'interface-name', interfaceName) : result;
+}
+
+/** True when a top-level mapping/list key exists and is not empty or comment-only. */
+export function hasConfigSectionValue(source, key) {
+  if (looksJSON(source)) {
+    const value = parseJSONSource(source)[key];
+    if (Array.isArray(value)) return value.length > 0;
+    if (value && typeof value === 'object') return Object.keys(value).length > 0;
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  }
+  const { lines, entries } = splitTopLevel(source);
+  const entry = entries.find(item => item.key === key);
+  if (!entry) return false;
+  const raw = entry.raw.trim();
+  if (raw && !raw.startsWith('#')) {
+    if (raw.startsWith('[')) return raw.replace(/^\[|\]$/g, '').trim().length > 0;
+    return true;
+  }
+  for (let index = entry.index + 1; index < entry.end; index += 1) {
+    if (lines[index].trim() && !/^\s*#/.test(lines[index])) return true;
+  }
+  return false;
 }
 
 export function topLevelValue(source, key) {

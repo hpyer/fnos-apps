@@ -14,10 +14,11 @@ import { AppError, fail } from './errors.mjs';
 import { LogHub } from './log-hub.mjs';
 import { redact } from './redact.mjs';
 import { CHANNELS, CoreRepository, channelConfig } from './repository.mjs';
+import { augmentSubscriptionConfig } from './config-template.mjs';
 import { DATASETS, DATASET_KEYS, MODEL_LABELS, MODEL_URLS, datasetDefaults } from './datasets.mjs';
 import { PreparationProgress } from './progress.mjs';
 import { mirrorGithubUrl, normalizeMirror, unmirrorGithubUrl } from './mirror.mjs';
-import { configInfo, ensureTunDns, injectController, proxyProviders, setTunEnabled, topLevelValue } from './yaml.mjs';
+import { configInfo, directProxies, ensureTunDns, injectController, proxyProviders, setTunEnabled, topLevelValue } from './yaml.mjs';
 import { atomicJSON, atomicWrite, ensureDir, hashFile, pathExists, randomSecret, readJSON, removePath, safeId } from './storage.mjs';
 
 const VERSION_OUTPUT_MAX = 32768;
@@ -1345,6 +1346,8 @@ export class ClashManager extends EventEmitter {
     try { providerData = await client.request({ path: '/providers/proxies', timeout: 3000 }); } catch { providerData = null; }
     const remoteProviders = providerData?.providers || {};
     const config = await this.config.read();
+    const directNames = directProxies(config.source);
+    const localProxies = directNames.filter(name => proxies[name] && !groupNames.has(name));
     const definitions = proxyProviders(config.source);
     const providers = definitions.map(definition => {
       const remote = remoteProviders[definition.name] || {};
@@ -1388,7 +1391,13 @@ export class ClashManager extends EventEmitter {
       const values = group.all.map(name => proxies[name]?.delay || 0).filter(delay => delay > 0);
       if (values.length) proxies[group.name].delay = Math.min(...values);
     }
-    return { mode: this.runtimeMode || config.info.mode || 'rule', groups, proxies, providers };
+    return {
+      mode: this.runtimeMode || config.info.mode || 'rule',
+      groups,
+      proxies,
+      providers,
+      local: { count: localProxies.length, proxies: localProxies },
+    };
   }
 
   async refreshProvider(name) {
@@ -1718,8 +1727,11 @@ export class ClashManager extends EventEmitter {
   async applySubscription(id) {
     const item = this.config.findSubscription(id);
     const source = await this.config.readSubscriptionContent(id);
-    await this.exclusive(() => { this.assertNoJob(); return this.applyConfig(source, { kind: 'subscription', subscriptionId: item.id }); });
-    return this.status();
+    const augmented = augmentSubscriptionConfig(source);
+    if (augmented.added.length) this.log('info', `订阅缺少 ${augmented.added.join('、')}，已自动补充基础分组与规则`);
+    const status = await this.exclusive(() => { this.assertNoJob(); return this.applyConfig(augmented.source, { kind: 'subscription', subscriptionId: item.id }); });
+    status.augmented = augmented.added;
+    return status;
   }
 
   async previewSubscription(id) { return this.config.previewSubscription(id); }

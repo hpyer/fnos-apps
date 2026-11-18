@@ -167,13 +167,72 @@ test('订阅下载与应用会替换配置并重启 Core', async t => {
   const added = await manager.addSubscription({ name: '测试订阅', url: 'https://sub.example.com/api?token=hidden', intervalHours: 0 });
   assert.match(added.urlMasked, /\?\*\*\*/);
   await manager.updateSubscription(added.id);
-  await manager.applySubscription(added.id);
+  const applied = await manager.applySubscription(added.id);
+  assert.deepEqual(applied.augmented, []);
   const config = await manager.readConfig();
   assert.equal(config.kind, 'subscription');
   assert.equal(config.subscriptionId, added.id);
   assert.equal((await manager.status()).core.state, 'running');
   await manager.deleteSubscription(added.id);
   assert.equal((await manager.status()).subscriptions.length, 0);
+});
+
+test('配置 proxies 直接定义的节点会单独返回', async t => {
+  const { manager } = await setup(t);
+  await addFakeCore(manager, 'installed-one');
+  await activateManually(manager, 'installed-one');
+  await manager.config.save([
+    'mixed-port: 23476',
+    'mode: rule',
+    'proxies:',
+    '  - name: Node A',
+    '    type: ss',
+    '  - name: Node B',
+    '    type: ss',
+    'proxy-groups:',
+    '  - name: Proxy',
+    '    type: select',
+    '    proxies:',
+    '      - Node A',
+    'rules:',
+    '  - MATCH,Proxy',
+    '',
+  ].join('\n'));
+  await manager.startCore();
+
+  const data = await manager.proxies();
+  assert.deepEqual(data.local.proxies, ['Node A', 'Node B']);
+  assert.equal(data.local.count, 2);
+  assert.ok(data.groups.some(group => group.name === 'Proxy'));
+});
+
+test('只有节点列表的订阅应用时自动补充分组和规则', async t => {
+  const subscription = [
+    'mixed-port: 23476',
+    'mode: rule',
+    'proxies:',
+    '  - name: Node A',
+    '    type: ss',
+    '    server: 1.2.3.4',
+    '    port: 443',
+    '    cipher: aes-128-gcm',
+    '    password: secret',
+    '',
+  ].join('\n');
+  const { manager } = await startedManager(t, 23476, {
+    fetcher: async () => new Response(subscription, { status: 200 }),
+    resolver: async () => [{ address: '93.184.216.34' }],
+  });
+  const added = await manager.addSubscription({ name: '节点列表', url: 'https://sub.example.com/provider', intervalHours: 0 });
+  await manager.updateSubscription(added.id);
+  const applied = await manager.applySubscription(added.id);
+  assert.deepEqual(applied.augmented, ['proxy-groups', 'rules']);
+  const config = await manager.readConfig();
+  assert.match(config.source, /proxy-groups:/);
+  assert.match(config.source, /- name: 节点选择/);
+  assert.match(config.source, /MATCH,节点选择/);
+  assert.equal((await manager.proxies()).local.count, 1);
+  assert.equal((await manager.status()).core.state, 'running');
 });
 
 test('版本启用、回滚和删除保护', async t => {

@@ -26,6 +26,7 @@ const state = {
   prepareStartedAt: 0,
   prepareCollapsed: false,
   editingSubscription: '',
+  localNodesOpen: false,
   expandedProviders: new Set(),
   expandedGroups: new Set(),
   initializedProxies: false,
@@ -322,6 +323,7 @@ async function refreshStatus() {
     renderQuickGroup();
     renderSubscriptions();
     updateConfigMeta();
+    renderConfigDataHint();
     renderPreparation();
     renderSettingsForm(false);
     if (state.view === 'settings') renderCoreVersions();
@@ -590,10 +592,13 @@ function renderProxies() {
   const mode = state.status?.core.mode || 'rule';
   const groups = visibleGroups();
   const providers = data?.providers || [];
+  const localNodes = data?.local?.proxies || [];
   const search = proxySearch();
   const hint = $('proxy-mode-hint');
 
-  $('proxy-summary').textContent = data ? `${providers.length} 个提供商 · ${providers.reduce((sum, item) => sum + item.count, 0)} 个节点 · ${groups.length} 个策略组` : '—';
+  $('proxy-summary').textContent = data
+    ? `${providers.length} 个提供商 · ${providers.reduce((sum, item) => sum + item.count, 0) + localNodes.length} 个节点 · ${groups.length} 个策略组`
+    : '—';
   $('delay-all').disabled = !running;
   $('toggle-providers').disabled = !providers.length;
   $('toggle-groups').disabled = !groups.length;
@@ -614,16 +619,35 @@ function renderProxies() {
   } else hint.hidden = true;
 
   if (!data) {
+    $('local-nodes-card').hidden = true;
     $('node-providers').replaceChildren(node('p', running ? '正在读取节点…' : 'Core 运行后加载节点', 'empty'));
     $('group-list').replaceChildren(node('p', running ? '正在读取策略组…' : 'Core 运行后加载策略组', 'empty'));
     return;
   }
 
   const providerNodes = providers.map(provider => providerCard(provider, search)).filter(Boolean);
-  $('node-providers').replaceChildren(...(providerNodes.length ? providerNodes : [node('p', search ? '没有匹配的提供商' : '配置中未定义 proxy-providers', 'empty')]));
+  const providerEmpty = localNodes.length
+    ? '配置未使用 proxy-providers，节点见下方「配置节点」'
+    : '配置中未定义 proxy-providers';
+  $('node-providers').replaceChildren(...(providerNodes.length ? providerNodes : [node('p', search ? '没有匹配的提供商' : providerEmpty, 'empty')]));
+
+  $('local-nodes-card').hidden = localNodes.length === 0;
+  $('local-nodes-count').textContent = `${localNodes.length} 个节点`;
+  $('toggle-local-nodes').textContent = state.localNodesOpen ? '收起' : '展开';
+  if (state.localNodesOpen) {
+    const matchedLocal = localNodes.filter(name => !search || name.toLowerCase().includes(search));
+    $('local-node-grid').hidden = false;
+    $('local-node-grid').replaceChildren(...(matchedLocal.length ? matchedLocal.map(nodeCard) : [node('p', '没有匹配的节点', 'empty')]));
+  } else {
+    $('local-node-grid').hidden = true;
+    $('local-node-grid').replaceChildren();
+  }
 
   const groupRows = groups.map(group => groupRow(group, search)).filter(Boolean);
-  $('group-list').replaceChildren(...(groupRows.length ? groupRows : [node('p', search ? '没有匹配的策略组' : '配置中没有策略组', 'empty')]));
+  const groupEmpty = localNodes.length
+    ? '配置中没有策略组；可切换到「全局」模式，在 GLOBAL 组中选择节点，或参考「载入模板」补充分组'
+    : '配置中没有策略组';
+  $('group-list').replaceChildren(...(groupRows.length ? groupRows : [node('p', search ? '没有匹配的策略组' : groupEmpty, 'empty')]));
   updateToggleLabels();
 }
 
@@ -645,6 +669,10 @@ async function refreshProxies() {
 
 function wireProxies() {
   $('proxy-search').addEventListener('input', () => renderProxies());
+  $('toggle-local-nodes').addEventListener('click', () => {
+    state.localNodesOpen = !state.localNodesOpen;
+    renderProxies();
+  });
   $('toggle-providers').addEventListener('click', () => {
     const providers = state.proxies?.providers || [];
     const allOpen = providers.length && providers.every(provider => state.expandedProviders.has(provider.name));
@@ -781,6 +809,16 @@ function updateConfigMeta() {
   if (!config) return;
   $('config-meta').textContent = `${configKindLabel(config.kind)} · ${formatTime(config.updatedAt)} · ${formatBytes(config.size)}`;
 }
+
+function renderConfigDataHint() {
+  const readiness = state.status?.readiness;
+  const hint = $('config-data-hint');
+  if (!readiness || readiness.ready !== false) { hint.hidden = true; return; }
+  const names = (readiness.names || []).join('、') || '外部数据';
+  hint.hidden = false;
+  hint.textContent = `首次应用或校验配置会自动下载 ${names}，根据网络可能需要数分钟；进度浮窗会显示下载进度，期间请勿关闭页面。`;
+}
+
 function backupLabel(label) {
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(String(label));
   return match ? `${match[1]} ${match[2]}:${match[3]}:${match[4]}` : String(label);
@@ -825,6 +863,15 @@ async function ensureConfig(force = false) {
 
 function wireConfig() {
   $('config-source').addEventListener('input', () => { state.configDirty = true; });
+  $('load-template-config').addEventListener('click', async () => {
+    if (state.configDirty && !(await askConfirm('载入默认模板', '当前编辑内容会被默认模板替换（不会立即保存）。'))) return;
+    const data = await act(() => get('config/template'), '', { silent: true });
+    if (!data) return notify(state.lastError || '读取默认模板失败', 'error', 6000);
+    $('config-source').value = data.source;
+    state.configDirty = true;
+    state.configLoaded = true;
+    notify('已载入默认模板：在 proxy-providers 中填入订阅链接后保存并应用', 'info', 7000);
+  });
   $('import-config-button').addEventListener('click', () => $('import-config').click());
   $('import-config').addEventListener('change', async () => {
     const file = $('import-config').files?.[0];
@@ -845,6 +892,10 @@ function wireConfig() {
   $('save-config').addEventListener('click', async () => {
     const source = $('config-source').value;
     if (!source.trim()) return notify('配置内容不能为空', 'warning');
+    if (/url:\s*""/.test(source)) {
+      const replace = await askConfirm('订阅链接尚未填入', '配置中的订阅链接还是空的，保存后不会有代理节点。仍要保存吗？');
+      if (!replace) return;
+    }
     const buttonEl = $('save-config');
     buttonEl.disabled = true;
     buttonEl.textContent = '准备并应用中…';
@@ -948,6 +999,7 @@ async function runSubscriptionAction(action, id, message, reloadConfig = false) 
   const result = await act(() => post(action, { id }), message);
   for (const item of buttonEls) item.disabled = false;
   if (result) {
+    if (result.augmented?.length) notify('订阅未包含策略组或规则，已自动补充「节点选择 / 自动选择」和基础规则', 'warning', 9000);
     await refreshStatus();
     if (reloadConfig) { state.configLoaded = false; await ensureConfig(true); }
   }

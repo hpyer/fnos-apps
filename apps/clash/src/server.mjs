@@ -2,6 +2,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { chmod, readFile, rm } from 'node:fs/promises';
 import { GitHubReleaseSource, UpdateChecker, readAppVersion } from '@fnos/version-check';
+import { defaultConfig } from './config-template.mjs';
 import { AppError, fail } from './errors.mjs';
 
 export const PREFIX = '/app/clash-for-fnos';
@@ -143,6 +144,7 @@ export async function serve(manager, { assets, socket, devPort, getCredentialKey
           case `${PREFIX}/api/preparation`: return json(response, 200, { preparation: manager.preparationSnapshot() });
           case `${PREFIX}/api/update`: return json(response, 200, await checkUpdate());
           case `${PREFIX}/api/config`: return json(response, 200, await manager.readConfig());
+          case `${PREFIX}/api/config/template`: return json(response, 200, { source: defaultConfig() });
           case `${PREFIX}/api/backups`: return json(response, 200, { backups: await manager.listBackups() });
           case `${PREFIX}/api/diagnostics`: return json(response, 200, await manager.diagnostics());
           case `${PREFIX}/api/data`: return json(response, 200, await manager.dataStatus());

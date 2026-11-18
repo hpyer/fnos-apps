@@ -155,6 +155,9 @@ test('GET 接口返回状态、配置、日志与流量流', async t => {
   const { socket, manager } = await fixture(t);
   assert.equal((await socketRequest(socket, '/api/status', { headers: ADMIN })).status, 200);
   assert.match((await socketRequest(socket, '/api/config', { headers: ADMIN })).text, /mixed-port/);
+  const template = await socketRequest(socket, '/api/config/template', { headers: ADMIN });
+  assert.equal(template.status, 200);
+  assert.match(template.text, /proxy-providers/);
   const preparation = await socketRequest(socket, '/api/preparation', { headers: ADMIN });
   assert.equal(preparation.status, 200);
   assert.equal(JSON.parse(preparation.text).preparation.active, false);

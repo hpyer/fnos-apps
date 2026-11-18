@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AppError } from '../src/errors.mjs';
-import { configInfo, ensureTunDns, injectController, proxyProviders, setTunEnabled, setTopLevel, topLevelValue, validateConfigSource } from '../src/yaml.mjs';
+import { configInfo, directProxies, ensureTunDns, injectController, proxyProviders, setTunEnabled, setTopLevel, topLevelValue, validateConfigSource } from '../src/yaml.mjs';
 
 const SOURCE = `# my config
 mixed-port: 7890
@@ -150,4 +150,31 @@ test('拒绝空配置、超大配置与无效结构', () => {
   assert.throws(() => validateConfigSource('a'.repeat(2 * 1024 * 1024 + 1)), /超过 2 MiB/);
   assert.throws(() => validateConfigSource('# only comments'), /无法识别配置结构/);
   assert.throws(() => validateConfigSource('{ bad json'), /JSON 配置解析失败/);
+});
+
+test('读取配置中直接定义的 proxies 名称', () => {
+  const source = [
+    'proxies:',
+    '  - name: "香港 01"',
+    '    type: ss',
+    '    server: 1.2.3.4',
+    '  - name: \'日本-02\'',
+    '    type: vmess',
+    '  - {name: 美国 03, type: trojan, server: a.com}',
+    '  -',
+    '    name: 新加坡 04',
+    '    type: ss',
+    'proxy-groups:',
+    '  - name: Proxy',
+    '    type: select',
+    '    proxies:',
+    '      - "香港 01"',
+    '',
+  ].join('\n');
+  assert.deepEqual(directProxies(source), ['香港 01', '日本-02', '美国 03']);
+  assert.deepEqual(directProxies('proxies: []\n'), []);
+  assert.deepEqual(directProxies('proxies: [{name: a}, {name: "b"}]\n'), ['a', 'b']);
+  assert.deepEqual(directProxies('mixed-port: 7890\n'), []);
+  assert.deepEqual(directProxies(JSON.stringify({ proxies: [{ name: 'json-a' }, { name: 'json-b' }] })), ['json-a', 'json-b']);
+  assert.deepEqual(directProxies('{"proxies": []}'), []);
 });
