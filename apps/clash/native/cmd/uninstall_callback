@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+# wizard_delete_data defaults to keep; only an explicit delete choice removes data.
+action="${wizard_delete_data:-keep}"
+case "$action" in
+  delete|true|1) ;;
+  *) echo '保留 Clash 应用数据'; exit 0 ;;
+esac
+
+data="${TRIM_PKGVAR:-}"
+if [ -z "$data" ]; then
+  echo '未找到应用数据目录，跳过清理' >&2
+  exit 0
+fi
+canonical=$(readlink -f "$data" 2>/dev/null || true)
+if [ -z "$canonical" ]; then
+  echo '应用数据目录无法解析，拒绝清理' >&2
+  exit 0
+fi
+case "$canonical" in
+  /vol*/@appdata/clash-for-fnos|/vol*/@appdata/clash-for-fnos/var|/vol*/@appcenter/clash-for-fnos/var|/var/apps/clash-for-fnos/var) ;;
+  *) echo "拒绝清理非应用数据路径：$canonical" >&2; exit 0 ;;
+esac
+if [ "$canonical" = "/" ] || [ "$canonical" = "/var" ] || [ "$canonical" = "/vol1/@appdata" ]; then
+  echo "拒绝清理危险路径：$canonical" >&2
+  exit 0
+fi
+case "$canonical" in
+  /vol*/@appdata/clash-for-fnos/var)
+    app_dir=$(dirname -- "$canonical")
+    rm -rf -- "$app_dir"
+    ;;
+  *)
+    rm -rf -- "$canonical"
+    ;;
+esac
+if [ "$data" != "$canonical" ]; then rm -f -- "$data" 2>/dev/null || true; fi
+echo '已删除 Clash 应用数据'
+exit 0

@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+# Manage the NAS-wide proxy environment block used by fnOS and login shells.
+# Only this marker block is touched; unrelated lines are preserved.
+ENV_FILE="${SYSTEM_ENV_FILE:-/etc/environment}"
+ACTION="${1:-}"
+PORT="${2:-}"
+BEGIN='# clash-for-fnos proxy begin'
+END='# clash-for-fnos proxy end'
+
+case "$ACTION" in
+  enable)
+    case "$PORT" in
+      ''|*[!0-9]*) echo 'invalid proxy port' >&2; exit 1 ;;
+    esac
+    if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo 'invalid proxy port' >&2; exit 1; fi
+    ;;
+  disable) ;;
+  *) echo 'usage: system-proxy enable|disable [port]' >&2; exit 1 ;;
+esac
+
+TMP=$(mktemp "${ENV_FILE}.clash-for-fnos.XXXXXX")
+trap 'rm -f "$TMP"' EXIT HUP INT TERM
+
+if [ -r "$ENV_FILE" ]; then
+  awk -v begin="$BEGIN" -v end="$END" '
+    $0 == begin { skip = 1; next }
+    $0 == end { skip = 0; next }
+    !skip { print }
+  ' "$ENV_FILE" > "$TMP"
+fi
+
+if [ "$ACTION" = enable ]; then
+  {
+    echo "$BEGIN"
+    echo "http_proxy=http://127.0.0.1:${PORT}"
+    echo "https_proxy=http://127.0.0.1:${PORT}"
+    echo "all_proxy=http://127.0.0.1:${PORT}"
+    echo "no_proxy=localhost,127.0.0.1,::1"
+    echo "$END"
+  } >> "$TMP"
+fi
+
+chmod 0644 "$TMP"
+mv "$TMP" "$ENV_FILE"
+trap - EXIT

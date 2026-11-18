@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+# Embedded cores are shipped compressed and read-only; the manager extracts them
+# into the private runtime directory before use.
+for file in "${TRIM_APPDEST}"/app/cores/*/mihomo.gz; do
+  [ -f "$file" ] && chmod 0444 "$file"
+done
+exit 0

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "channel": "metacubex-stable",
+  "version": "v1.19.34",
+  "tag": "v1.19.34",
+  "source": "https://github.com/MetaCubeX/mihomo",
+  "license": "GPL-3.0",
+  "licenseUrl": "https://raw.githubusercontent.com/MetaCubeX/mihomo/v1.19.34/LICENSE",
+  "checkedAt": "2026-11-18",
+  "assets": {
+    "x86_64": {
+      "name": "mihomo-linux-amd64-v1.19.34.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-amd64-v1.19.34.gz",
+      "sha256": "223fab877e5795ce780ba39902e5f0b1113c1256ae244a7160f1165e017e9ccc",
+      "size": 22731319,
+      "elfMachine": 62
+    },
+    "arm64": {
+      "name": "mihomo-linux-arm64-v1.19.34.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-arm64-v1.19.34.gz",
+      "sha256": "daaf78a6240a282cdfd75bcbf98fe321f6bd52765cc29e79f344191198f0b50f",
+      "size": 20684679,
+      "elfMachine": 183
+    }
+  },
+  "licenseFile": {
+    "name": "LICENSE",
+    "url": "https://raw.githubusercontent.com/MetaCubeX/mihomo/v1.19.34/LICENSE",
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "size": 35149
+  }
+}

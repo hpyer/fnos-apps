@@ -1,0 +1,21 @@
+[
+  {
+    "stepTitle": "数据清理",
+    "items": [
+      {
+        "type": "radio",
+        "field": "wizard_delete_data",
+        "label": "应用数据",
+        "initValue": "keep",
+        "options": [
+          { "label": "保留配置、订阅和日志", "value": "keep" },
+          { "label": "删除全部应用数据（不可恢复）", "value": "delete" }
+        ]
+      },
+      {
+        "type": "tips",
+        "helpText": "默认保留 /vol*/@appdata/clash-for-fnos 下的配置、订阅、日志和已安装内核；选择“删除全部应用数据”后，卸载回调会删除该应用数据目录，且无法恢复。"
+      }
+    ]
+  }
+]

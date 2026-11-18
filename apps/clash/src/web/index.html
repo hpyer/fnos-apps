@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clash for fnOS</title>
+  <link rel="stylesheet" href="./index.css">
+  <script src="./index.js" type="module"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <section class="side-status" aria-label="运行状态">
+        <div class="side-status-head">
+          <span id="side-dot" class="dot" aria-hidden="true"></span>
+          <div class="side-status-copy"><strong id="side-state">读取中</strong><small id="side-core">—</small></div>
+          <div class="side-actions">
+            <button id="side-start" type="button" class="icon-control" title="启动" aria-label="启动">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button id="side-restart" type="button" class="icon-control" title="重启" aria-label="重启">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v6h-6"/></svg>
+            </button>
+            <button id="side-stop" type="button" class="icon-control" title="停止" aria-label="停止">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div class="side-modes" role="group" aria-label="代理模式">
+        <button type="button" data-mode="rule">规则</button>
+        <button type="button" data-mode="global">全局</button>
+        <button type="button" data-mode="direct">直连</button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-item is-active" type="button" data-view="overview">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+          <span>概览</span>
+        </button>
+        <button class="nav-item" type="button" data-view="proxies">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M4 12h7M4 17h13"/><circle cx="18" cy="7" r="2.4"/><circle cx="14" cy="17" r="2.4"/></svg>
+          <span>代理</span>
+        </button>
+        <button class="nav-item" type="button" data-view="config">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+          <span>配置</span>
+        </button>
+        <button class="nav-item" type="button" data-view="connections">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14M19 5v14M5 12h14"/><circle cx="5" cy="5" r="1.6"/><circle cx="19" cy="19" r="1.6"/></svg>
+          <span>连接</span>
+        </button>
+        <button class="nav-item" type="button" data-view="logs">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>
+          <span>日志</span>
+        </button>
+        <button class="nav-item" type="button" data-view="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.1L14.2 3h-4.4l-.4 2.7a7 7 0 0 0-2 1.1L5 5.9 3 9.3l2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.1l.4 2.7h4.4l.4-2.7a7 7 0 0 0 2-1.1l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>
+          <span>设置</span>
+        </button>
+      </nav>
+
+      <div class="side-meta">
+        <div><span>应用版本</span><strong id="side-version">—</strong></div>
+        <div><span>平台</span><strong id="side-platform">—</strong></div>
+        <div class="side-switch-row"><span title="只写入 /etc/environment，仅新登录会话生效">系统代理</span><label class="switch mini"><input id="toggle-system-proxy" type="checkbox" aria-label="NAS 系统代理"><i></i></label></div>
+        <div class="side-switch-row"><span>增强模式</span><label class="switch mini"><input id="toggle-tun" type="checkbox" aria-label="增强模式（TUN）"><i></i></label></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section id="view-overview" class="view">
+        <div class="metrics">
+          <article class="card metric"><span class="metric-label">实时流量</span><div class="metric-value"><strong id="rate-down">0 B/s</strong><span class="muted">下载</span></div><div class="metric-sub"><span id="rate-up" class="muted">0 B/s</span><span class="muted">上传</span></div></article>
+          <article class="card metric"><span class="metric-label">累计流量</span><div class="metric-value"><strong id="total-down">0 B</strong><span class="muted">下载</span></div><div class="metric-sub"><span id="total-up" class="muted">0 B</span><span class="muted">上传</span></div></article>
+          <article class="card metric"><span class="metric-label">内存占用</span><div class="metric-value"><strong id="memory">—</strong></div><div class="metric-sub"><span class="muted">mihomo 进程</span></div></article>
+          <article class="card metric"><span class="metric-label">活动连接</span><div class="metric-value"><strong id="connections-count">0</strong></div><div class="metric-sub"><span class="muted">当前连接数</span></div></article>
+          <article class="card metric"><span class="metric-label">运行时长</span><div class="metric-value"><strong id="uptime">—</strong></div><div class="metric-sub"><span id="started-at" class="muted">—</span></div></article>
+          <article class="card metric"><span class="metric-label">监听端口</span><div class="metric-value"><strong id="ports">—</strong></div><div class="metric-sub"><span id="allow-lan" class="muted">—</span></div></article>
+        </div>
+
+        <article class="card">
+          <div class="card-head"><div><h2>当前代理组</h2><p class="muted">快速切换规则模式下的出口</p></div><div class="actions"><button id="quick-delay" type="button">一键测速</button></div></div>
+          <div id="quick-group" class="quick-group"><p class="empty">Core 运行后显示代理组</p></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>连通性测试</h2><p class="muted">模拟支持系统代理的第三方应用访问网址</p></div></div>
+          <div class="connectivity-form">
+            <input id="test-url" type="url" value="https://www.google.com" aria-label="测试网址" placeholder="https://www.google.com">
+            <button id="test-url-button" type="button" class="primary">测试</button>
+          </div>
+          <pre id="connectivity-output" class="connectivity-output">尚未测试。</pre>
+        </article>
+      </section>
+
+      <section id="view-proxies" class="view" hidden>
+        <div class="toolbar">
+          <input id="proxy-search" type="search" placeholder="搜索节点或策略组" aria-label="搜索节点">
+          <span id="proxy-summary" class="muted">—</span>
+          <button id="delay-all" type="button" class="primary">一键测速</button>
+        </div>
+        <p id="proxy-mode-hint" class="mode-hint" hidden></p>
+
+        <article class="card">
+          <div class="card-head"><div><h2>代理提供商</h2><p class="muted">来自配置 proxy-providers，点击展开全部节点</p></div><div class="actions"><button id="toggle-providers" type="button">全部展开</button></div></div>
+          <div id="node-providers" class="provider-list"><p class="empty">Core 运行后加载节点</p></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>策略组</h2><p class="muted">点击策略组展开节点并切换出口</p></div><div class="actions"><button id="toggle-groups" type="button">全部展开</button></div></div>
+          <div id="group-list" class="group-list"></div>
+        </article>
+      </section>
+
+      <section id="view-config" class="view" hidden>
+        <article class="card">
+          <div class="card-head"><div><h2>订阅</h2><p class="muted">下载内容不会自动应用，需手动确认</p></div><div class="actions"><button id="add-subscription" type="button" class="primary">新增订阅</button></div></div>
+          <div id="subscription-list" class="subscription-list"><p class="empty">尚未添加订阅</p></div>
+        </article>
+
+        <article class="card editor-card">
+          <div class="card-head"><div><h2>当前运行配置</h2><p id="config-meta" class="muted">—</p></div><div class="actions"><button id="refresh-config" type="button">重新载入</button></div></div>
+          <p id="config-managed-hint" class="managed-hint" hidden></p>
+          <textarea id="config-source" spellcheck="false" aria-label="Clash 配置内容" placeholder="mixed-port: 7890&#10;mode: rule&#10;proxies: []&#10;rules:&#10;  - MATCH,DIRECT"></textarea>
+          <div class="editor-actions">
+            <span class="muted">保存前自动校验，无变动不会新增备份</span>
+            <input id="import-config" type="file" accept=".yaml,.yml,.txt,text/yaml,text/plain" hidden>
+            <button id="import-config-button" type="button">导入文件</button>
+            <button id="validate-config" type="button">校验</button>
+            <button id="save-config" type="button" class="primary">保存并应用</button>
+          </div>
+          <div class="backup-row">
+            <label for="backup-select">配置备份</label>
+            <select id="backup-select"><option value="">选择备份…</option></select>
+            <button id="restore-backup" type="button">恢复</button>
+            <button id="delete-backup" type="button" class="danger">删除</button>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-connections" class="view" hidden>
+        <div class="toolbar">
+          <input id="conn-filter" type="search" placeholder="筛选主机、目标、规则或链路" aria-label="筛选连接">
+          <span id="conn-summary" class="muted">—</span>
+          <button id="conn-refresh" type="button">刷新</button>
+          <button id="close-all" type="button" class="danger">关闭全部连接</button>
+        </div>
+        <div class="card table-card">
+          <div class="conn-head" aria-hidden="true"><span>时间</span><span>网络</span><span>主机</span><span>目标</span><span>链路</span><span>规则</span><span>上传</span><span>下载</span></div>
+          <div id="connection-list" class="conn-list"></div>
+          <p id="conn-empty" class="empty">暂无活动连接</p>
+        </div>
+      </section>
+
+      <section id="view-logs" class="view" hidden>
+        <div class="toolbar">
+          <select id="log-level" aria-label="日志级别"><option value="">全部级别</option><option value="debug">调试</option><option value="info">信息</option><option value="warning">警告</option><option value="error">错误</option></select>
+          <input id="log-search" type="search" placeholder="搜索日志" aria-label="搜索日志">
+          <label class="check"><input id="log-follow" type="checkbox" checked> 自动滚动</label>
+          <button id="log-clear" type="button">清空视图</button>
+        </div>
+        <div class="card log-card"><div id="log-list" class="log-list"></div><p id="log-empty" class="empty">暂无日志</p></div>
+      </section>
+
+      <section id="view-settings" class="view" hidden>
+        <article class="card">
+          <div class="card-head"><div><h2>运行设置</h2></div></div>
+          <div class="settings-form compact">
+            <div class="setting-row"><label for="set-mixed-port">混合端口</label><input id="set-mixed-port" class="setting-input" type="number" min="1" max="65535" inputmode="numeric"></div>
+            <div class="setting-row"><label for="set-http-port">HTTP 端口</label><input id="set-http-port" class="setting-input" type="number" min="0" max="65535" inputmode="numeric" placeholder="0 表示关闭"></div>
+            <div class="setting-row"><label for="set-socks-port">SOCKS 端口</label><input id="set-socks-port" class="setting-input" type="number" min="0" max="65535" inputmode="numeric" placeholder="0 表示关闭"></div>
+            <div class="setting-row"><label for="set-delay-interval">定时测速间隔（分钟）</label><input id="set-delay-interval" class="setting-input" type="number" min="0" max="1440" inputmode="numeric" placeholder="0 表示关闭"></div>
+            <div class="setting-row"><label for="set-delay-url">测速网址</label><input id="set-delay-url" class="setting-input-wide" type="url" spellcheck="false"></div>
+            <div class="setting-row"><label for="set-delay-concurrency">测速并发数</label><input id="set-delay-concurrency" class="setting-input" type="number" min="1" max="20" inputmode="numeric"></div>
+            <div class="switch-row"><span>统一延迟测速</span><label class="switch"><input id="set-unified-delay" type="checkbox" aria-label="统一延迟测速"><i></i></label></div>
+            <div class="switch-row"><span>TCP 并发连接</span><label class="switch"><input id="set-tcp-concurrent" type="checkbox" aria-label="TCP 并发连接"><i></i></label></div>
+            <div class="setting-row"><label for="set-github-mirror">GitHub 加速地址</label><input id="set-github-mirror" class="setting-input-wide" type="url" spellcheck="false" placeholder="https://ghfast.top/"></div>
+            <div class="switch-row"><span>允许局域网访问</span><label class="switch"><input id="set-allow-lan" type="checkbox" aria-label="允许局域网访问"><i></i></label></div>
+            <div class="switch-row"><span>应用启动时自动启动内核</span><label class="switch"><input id="set-autostart" type="checkbox" aria-label="应用启动时自动启动内核"><i></i></label></div>
+            <div class="switch-row"><span>内核意外退出后自动重启</span><label class="switch"><input id="set-autorestart" type="checkbox" aria-label="内核意外退出后自动重启"><i></i></label></div>
+            <div class="switch-row"><span title="只写入 /etc/environment，仅新登录会话生效；透明代理请用增强模式">NAS 系统代理（环境变量）</span><label class="switch"><input id="set-system-proxy" type="checkbox" aria-label="NAS 系统代理"><i></i></label></div>
+            <div class="switch-row"><span>增强模式（TUN）</span><label class="switch"><input id="set-tun" type="checkbox" aria-label="增强模式（TUN）"><i></i></label></div>
+            <div class="setting-row"><label for="set-loglevel">日志级别</label><select id="set-loglevel" class="setting-select"><option value="debug">调试</option><option value="info">信息</option><option value="warning">警告</option><option value="error">错误</option><option value="silent">静默</option></select></div>
+            <div class="setting-row"><label for="set-channel">更新渠道</label><select id="set-channel" class="setting-select"></select></div>
+            <div class="actions"><button id="save-settings" type="button" class="primary">保存设置</button></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>内核版本</h2><p id="core-arch" class="muted">—</p></div><div class="actions"><button id="check-core" type="button">检查版本</button><button id="rollback-core" type="button">回滚</button></div></div>
+          <div id="job-progress" class="job" hidden><div class="job-line"><span id="job-message">准备中</span><span id="job-size" class="muted"></span></div><progress id="job-bar" max="100"></progress></div>
+          <div class="version-section"><h4>已安装</h4><div id="core-versions" class="version-list"><p class="empty">尚未安装其他版本</p></div></div>
+          <div class="version-section"><h4>内置</h4><div id="core-embedded" class="version-list"></div></div>
+          <div class="version-section"><h4>可用版本 <span id="available-channel" class="muted"></span></h4><p id="available-hint" class="muted"></p><div id="core-available" class="version-list"></div></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>外部数据</h2><p class="muted">GeoIP / GeoSite / ASN / Smart 模型</p></div></div>
+          <div class="settings-form compact">
+            <div class="switch-row"><span>自动更新外部数据</span><label class="switch"><input id="set-data-auto" type="checkbox" aria-label="自动更新外部数据"><i></i></label></div>
+            <div class="setting-row"><label for="set-data-interval">更新间隔（小时）</label><input id="set-data-interval" class="setting-input" type="number" min="1" max="720" inputmode="numeric"></div>
+            <div class="setting-row"><label for="set-data-model">Smart 模型版本</label><select id="set-data-model" class="setting-select model-select"></select></div>
+            <div class="actions"><button id="save-data-settings" type="button">保存数据设置</button><button id="sync-all-data" type="button">全部立即同步</button></div>
+          </div>
+          <div id="data-list" class="data-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>网络诊断</h2></div><div class="actions"><button id="run-diagnostics" type="button">运行诊断</button></div></div>
+          <pre id="diagnostics-output" class="diagnostics-output">尚未运行诊断。</pre>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="subscription-dialog" class="dialog" aria-labelledby="subscription-title">
+    <div class="dialog-head"><h2 id="subscription-title">新增订阅</h2><button type="button" class="icon-button" data-close="subscription-dialog" aria-label="关闭">×</button></div>
+    <div class="dialog-body">
+      <div class="field-row"><label for="sub-name">名称</label><input id="sub-name" type="text" maxlength="60" placeholder="例如：家庭订阅"></div>
+      <div class="field-row"><label for="sub-url">订阅地址</label><input id="sub-url" type="url" placeholder="https://example.com/subscribe?token=…" spellcheck="false"></div>
+      <div class="field-row"><label for="sub-interval">自动更新（小时）</label><input id="sub-interval" type="number" min="0" max="168" value="24"></div>
+      <p class="muted dialog-note">自动更新只下载并校验内容，不会自动应用；0 表示不自动更新。订阅地址仅支持 HTTPS，且不能解析到回环或内网地址。</p>
+    </div>
+    <div class="dialog-foot"><button type="button" data-close="subscription-dialog">取消</button><button id="save-subscription" type="button" class="primary">保存</button></div>
+  </dialog>
+
+  <dialog id="connection-dialog" class="dialog dialog-narrow" aria-labelledby="connection-title">
+    <div class="dialog-head"><h2 id="connection-title">连接详情</h2><button type="button" class="icon-button" data-close="connection-dialog" aria-label="关闭">×</button></div>
+    <div class="dialog-body"><dl id="connection-detail" class="connection-detail"></dl></div>
+    <div class="dialog-foot"><button id="connection-close" type="button" class="danger">关闭连接</button><button type="button" data-close="connection-dialog">返回</button></div>
+  </dialog>
+
+  <dialog id="password-dialog" class="dialog dialog-narrow" aria-labelledby="password-title">
+    <div class="dialog-head"><h2 id="password-title">管理员授权</h2><button type="button" class="icon-button" data-close="password-dialog" aria-label="关闭">×</button></div>
+    <div class="dialog-body">
+      <p id="password-text" class="confirm-text">此操作需要 NAS 管理员权限。</p>
+      <div class="field-row"><label for="password-input">管理员密码</label><input id="password-input" type="password" autocomplete="off"></div>
+      <p class="muted dialog-note">密码仅用于本次 sudo 提权，不会被保存或写入日志。也可以随时在 SSH 中执行一次初始化，之后无需再输入密码。</p>
+    </div>
+    <div class="dialog-foot"><button type="button" data-close="password-dialog">取消</button><button id="password-accept" type="button" class="primary">授权并执行</button></div>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="dialog dialog-narrow" aria-labelledby="confirm-title">
+    <div class="dialog-head"><h2 id="confirm-title">确认操作</h2><button type="button" class="icon-button" data-close="confirm-dialog" aria-label="关闭">×</button></div>
+    <div class="dialog-body"><p id="confirm-text" class="confirm-text">—</p></div>
+    <div class="dialog-foot"><button type="button" data-close="confirm-dialog">取消</button><button id="confirm-accept" type="button" class="danger">确认</button></div>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+# Keep user configuration and installed cores across upgrades; only verify that
+# the packaged core slots exist.
+for arch in x86_64 arm64; do
+  [ -f "${TRIM_APPDEST}/app/cores/${arch}/mihomo.gz" ] || {
+    echo "升级包缺少 ${arch} 内置 Core" >&2
+    exit 1
+  }
+done
+exit 0

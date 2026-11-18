@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+# Remove the NAS proxy environment block before the manager/helper disappears.
+if [ -x /usr/local/lib/clash-for-fnos/system-proxy ]; then
+  sudo -n /usr/local/lib/clash-for-fnos/system-proxy disable >/dev/null 2>&1 || true
+fi
+# Stop the manager (which stops the managed core) before package removal and
+# wait briefly so the core child can exit cleanly.
+if [ -r "${TRIM_PKGVAR}/manager.pid" ]; then
+  pid=$(cat "${TRIM_PKGVAR}/manager.pid")
+  case "$pid" in
+    ''|*[!0-9]*) ;;
+    *)
+      kill -TERM "$pid" 2>/dev/null || true
+      i=0
+      while [ "$i" -lt 15 ]; do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+        i=$((i + 1))
+      done
+      ;;
+  esac
+fi
+if [ "$(id -u)" -eq 0 ]; then
+  rm -f /etc/sudoers.d/clash-for-fnos
+  rm -rf /usr/local/lib/clash-for-fnos
+fi
+exit 0

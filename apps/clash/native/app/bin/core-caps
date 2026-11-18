@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+# Apply the minimum Linux capabilities needed by mihomo TUN mode.
+# This helper is intended to be invoked through the package-specific sudoers rule.
+VAR="${2:-}"
+case "$VAR" in
+  /var/apps/clash-for-fnos/var|/vol*/@appdata/clash-for-fnos|/vol*/@appdata/clash-for-fnos/var|/vol*/@appcenter/clash-for-fnos/var) ;;
+  *) echo 'invalid core data directory' >&2; exit 2 ;;
+esac
+[ "$(id -u)" -eq 0 ] || { echo 'core-caps requires root' >&2; exit 1; }
+
+SETCAP=""
+for candidate in /usr/sbin/setcap /sbin/setcap /usr/bin/setcap /bin/setcap; do
+  if [ -x "$candidate" ]; then SETCAP="$candidate"; break; fi
+done
+if [ -z "$SETCAP" ]; then
+  SETCAP=$(command -v setcap 2>/dev/null || true)
+fi
+[ -n "$SETCAP" ] || { echo 'setcap not found' >&2; exit 1; }
+
+CORE="${3:-}"
+if [ -n "$CORE" ]; then
+  case "$CORE" in
+    "$VAR"/cores/embedded/*/mihomo|"$VAR"/cores/installed/*/mihomo) ;;
+    *) echo 'invalid core path' >&2; exit 2 ;;
+  esac
+  [ -f "$CORE" ] || { echo 'core file not found' >&2; exit 1; }
+  "$SETCAP" cap_net_admin,cap_net_raw+ep "$CORE"
+  exit 0
+fi
+
+for root in "$VAR/cores/embedded" "$VAR/cores/installed"; do
+  [ -d "$root" ] || continue
+  find "$root" -type f -name mihomo -print 2>/dev/null | while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    "$SETCAP" cap_net_admin,cap_net_raw+ep "$file"
+  done
+done
+exit 0

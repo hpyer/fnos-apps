@@ -1,0 +1,14 @@
+appname = clash-for-fnos
+version = 0.1.0
+display_name = Clash for fnOS
+desc = 以应用用户托管 mihomo，提供内置 Core、订阅、代理组、连接、日志与版本管理。
+platform = x86
+source = thirdparty
+maintainer = hpyer
+distributor = hpyer
+desktop_uidir = ui
+desktop_applaunchname = clash-for-fnos.Application
+install_dep_apps = nodejs_v24
+os_min_version = 1.1.3100
+checkport = false
+micro_app = true
