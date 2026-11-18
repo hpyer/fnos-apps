@@ -42,8 +42,8 @@ export function normalizeSubscriptionName(value) {
 export function validateSubscriptionUrl(value) {
   if (typeof value !== 'string' || value.length > SUBSCRIPTION_URL_MAX) fail('订阅地址无效');
   let url;
-  try { url = new URL(value.trim()); } catch { fail('订阅地址必须是有效的 HTTPS 地址'); }
-  if (url.protocol !== 'https:') fail('订阅地址必须使用 HTTPS');
+  try { url = new URL(value.trim()); } catch { fail('订阅地址必须是有效的 HTTP/HTTPS 地址'); }
+  if (!['http:', 'https:'].includes(url.protocol)) fail('订阅地址只支持 HTTP/HTTPS');
   if (url.username || url.password) fail('订阅地址不能包含用户名或密码');
   return url.href;
 }
@@ -282,7 +282,8 @@ export class ConfigService {
     let current = url;
     for (let hop = 0; hop < 5; hop += 1) {
       const parsed = new URL(current);
-      if (parsed.protocol !== 'https:') fail('订阅重定向必须保持 HTTPS');
+      if (!['http:', 'https:'].includes(parsed.protocol)) fail('订阅重定向只支持 HTTP/HTTPS');
+      if (parsed.username || parsed.password) fail('订阅重定向不能包含用户名或密码');
       await this.assertPublicHost(parsed.hostname);
       const response = await this.fetcher(current, {
         redirect: 'manual',

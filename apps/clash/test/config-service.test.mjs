@@ -92,9 +92,9 @@ test('订阅添加、掩码、下载、应用与删除', async t => {
 test('拒绝不合法订阅、内网目标与无效内容', async t => {
   const { service } = await fixture(t);
   await assert.rejects(() => service.addSubscription({ name: '', url: 'https://a.example/x' }), /订阅名称/);
-  await assert.rejects(() => service.addSubscription({ name: 'n', url: 'http://a.example/x' }), /HTTPS/);
+  assert.equal(validateSubscriptionUrl('http://a.example/x'), 'http://a.example/x');
   await assert.rejects(() => service.addSubscription({ name: 'n', url: 'https://u:p@a.example/x' }), /用户名或密码/);
-  assert.throws(() => validateSubscriptionUrl('ftp://a.example/x'), /HTTPS/);
+  assert.throws(() => validateSubscriptionUrl('ftp://a.example/x'), /HTTP\/HTTPS/);
   assert.equal(isPrivateAddress('127.0.0.1'), true);
   assert.equal(isPrivateAddress('10.1.2.3'), true);
   assert.equal(isPrivateAddress('192.168.1.1'), true);
@@ -111,6 +111,16 @@ test('拒绝不合法订阅、内网目标与无效内容', async t => {
   const bad = await invalid.addSubscription({ name: 'bad', url: 'https://bad.example.com/sub' });
   await assert.rejects(() => invalid.updateSubscription(bad.id), /无法识别配置结构/);
   assert.match(invalid.listSubscriptions()[0].lastError, /无法识别配置结构/);
+});
+
+test('允许 HTTP 订阅但继续拒绝内网目标', async t => {
+  const download = fetcher();
+  const { service } = await fixture(t, { fetcher: download });
+  const added = await service.addSubscription({ name: 'http', url: 'http://plain.example.com/sub' });
+  assert.ok(added.updatedAt);
+  assert.equal(download.calls[0], 'http://plain.example.com/sub');
+  const lan = await service.addSubscription({ name: 'http-lan', url: 'http://127.0.0.1/sub' });
+  await assert.rejects(() => service.updateSubscription(lan.id), /内网|回环/);
 });
 
 test('内网域名解析结果被拒绝', async t => {

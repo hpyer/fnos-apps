@@ -8,7 +8,7 @@ fnOS 原生的 mihomo 托管应用。管理服务、Core 和订阅任务均以�
 
 - **概览**：实时上下行速率、累计流量、内存、连接数、运行时长、监听端口；当前策略组快捷切换与一键测速；模拟第三方应用的网址连通性测试。
 - **代理**：按配置中的 `proxy-providers` 展示提供商、用量、到期时间、节点数并支持展开和单独刷新；策略组展开、切换出口、搜索和批量测速。
-- **配置**：粘贴/导入 Clash YAML，保存前执行 `mihomo -t` 校验；失败自动回滚。支持 HTTPS 订阅、手动应用、定时下载和配置备份。
+- **配置**：粘贴/导入 Clash YAML，保存前执行 `mihomo -t` 校验；失败自动回滚。支持 HTTP/HTTPS 订阅、手动应用、定时下载和配置备份。
 - **连接与日志**：查看活动连接、关闭单条或全部连接；日志通过 SSE 实时推送，敏感字段自动脱敏。
 - **设置**：混合/HTTP/SOCKS 端口、allow-lan、自动启动、崩溃自动重启、系统代理、TUN、定时测速、统一延迟、TCP 并发、GitHub 加速、日志级别和 Core 渠道。
 - **外部数据**：GeoIP、GeoSite、Country MMDB、ASN 和 Smart 模型（Model.bin）的下载、自动更新、地址编辑和立即同步。
@@ -61,7 +61,7 @@ sudo /usr/local/lib/clash-for-fnos/setup-privileges /vol1/@appcenter/clash-for-f
 ### 配置与订阅
 
 - 配置保存前先执行 `mihomo -t`，通过后备份旧配置、写入新配置并重启 Core；校验或启动失败会自动恢复。
-- 订阅必须使用 HTTPS，默认拒绝回环、RFC1918、链路本地和 CGNAT 地址，防止 SSRF；内容上限 8 MiB，配置上限 2 MiB。
+- 订阅支持 HTTP/HTTPS；HTTP 为明文传输，建议使用 HTTPS。默认拒绝回环、RFC1918、链路本地和 CGNAT 地址，防止 SSRF；内容上限 8 MiB，配置上限 2 MiB。
 - 订阅添加时立即下载一次；自动更新只下载内容，不自动替换当前配置，需要手动「应用」。
 - 订阅地址在界面中只显示掩码。
 
@@ -129,7 +129,7 @@ Controller 只监听私有 Unix Socket `${TRIM_PKGVAR}/runtime/controller.sock`�
 
 ## 安全说明
 
-- 订阅地址必须为 HTTPS；下载前解析域名并拒绝回环、内网、链路本地和 CGNAT 地址。
+- 订阅地址支持 HTTP/HTTPS；HTTP 会明文传输订阅地址和内容，建议使用 HTTPS。下载前解析域名并拒绝回环、内网、链路本地和 CGNAT 地址。
 - Controller secret、订阅地址和敏感日志字段不会返回给前端；订阅地址在界面中掩码显示。
 - 管理员密码只在内存中用于一次 sudo 认证，不保存、不写入日志；提交使用 ECDH + AES-GCM 加密通道。
 - 服务模式 helper 必须由 root 拥有且不可被其他用户写入；应用目录中的同名脚本只作为安装源，不会通过 sudo 执行。

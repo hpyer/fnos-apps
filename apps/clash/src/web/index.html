@@ -221,7 +221,7 @@
       <div class="field-row"><label for="sub-name">名称</label><input id="sub-name" type="text" maxlength="60" placeholder="例如：家庭订阅"></div>
       <div class="field-row"><label for="sub-url">订阅地址</label><input id="sub-url" type="url" placeholder="https://example.com/subscribe?token=…" spellcheck="false"></div>
       <div class="field-row"><label for="sub-interval">自动更新（小时）</label><input id="sub-interval" type="number" min="0" max="168" value="24"></div>
-      <p class="muted dialog-note">自动更新只下载并校验内容，不会自动应用；0 表示不自动更新。订阅地址仅支持 HTTPS，且不能解析到回环或内网地址。</p>
+      <p class="muted dialog-note">自动更新只下载并校验内容，不会自动应用；0 表示不自动更新。订阅支持 HTTP/HTTPS；HTTP 为明文传输，建议优先使用 HTTPS。订阅地址不能解析到回环或内网地址。</p>
     </div>
     <div class="dialog-foot"><button type="button" data-close="subscription-dialog">取消</button><button id="save-subscription" type="button" class="primary">保存</button></div>
   </dialog>

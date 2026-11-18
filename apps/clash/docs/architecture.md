@@ -45,7 +45,7 @@ mihomo 子进程（当前激活槽位）
 
 - 用户配置保存在 `config/config.yaml`，写入前执行 `mihomo -t`；保存时先校验、再备份（保留最近 10 份，可手动删除），写入失败或应用失败会回滚配置并恢复原 Core。`external-controller*`、`external-ui*`、`secret`、`log-level`、`mixed-port`、`port`、`socks-port` 和 `allow-lan` 由应用接管并在运行时配置中重写；配置页会列出这些被接管的字段。
 - 运行时配置不直接使用用户文件：`yaml.mjs` 只解析顶层字段，删除 `external-controller*`、`external-ui*`、`secret`、`log-level` 以及托管的端口/allow-lan，再追加私有 Unix Socket、随机 secret、日志级别和设置页中的网络参数。JSON 配置同样支持。嵌套结构不做解释，语法语义仍由 `mihomo -t` 判定。
-- 订阅必须为 HTTPS，下载前解析域名并拒绝回环、RFC1918、链路本地和 CGNAT 地址（SSRF 防护），重定向逐跳复核；`198.18.0.0/15`（benchmark/fake-ip 保留段）不视为内网服务。内容上限 8 MiB 且必须是可识别的 Clash 配置。自动更新只下载内容，应用动作由用户确认；下载失败按间隔退避重试（记录 attemptedAt）。
+- 订阅支持 HTTP/HTTPS（HTTP 为明文，建议 HTTPS），下载前解析域名并拒绝回环、RFC1918、链路本地和 CGNAT 地址（SSRF 防护），重定向逐跳复核；`198.18.0.0/15`（benchmark/fake-ip 保留段）不视为内网服务。内容上限 8 MiB 且必须是可识别的 Clash 配置。自动更新只下载内容，应用动作由用户确认；下载失败按间隔退避重试（记录 attemptedAt）。
 - 配置备份、订阅内容和 Core 元数据均为 `0600`，目录为 `0700`；GeoIP/GeoSite 等外部数据由设置页下载到 `runtime/`；首次启动自动补齐 Core 所需数据。
 - 卸载向导 `wizard/uninstall` 提供保留/删除数据单选，默认保留；`uninstall_callback` 仅在用户明确选择删除时清理 `TRIM_PKGVAR`，并校验路径属于本应用。
 
