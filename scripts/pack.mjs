@@ -54,6 +54,11 @@ for (const arch of architectures) {
   const staging = path.join(stagingRoot, app.appId);
   try {
     await cp(app.distDir, staging, { recursive: true, dereference: true });
+    // Optional per-application pruning keeps each architecture's FPK self-contained
+    // without carrying unrelated embedded runtimes.
+    for (const relative of app.packageJson.fnos?.archPrune?.[arch] || []) {
+      await rm(path.join(staging, relative), { recursive: true, force: true });
+    }
     // Native modules must be Linux ELF files for the selected architecture.
     // A manifest label alone cannot turn a host build into a target build.
     for (const template of app.packageJson.fnos?.nativeModules || []) {
