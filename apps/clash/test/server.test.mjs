@@ -29,6 +29,7 @@ function createManager() {
   manager.traffic = { up: 1, down: 2, at: Date.now() };
   manager.log = () => {};
   manager.status = async () => ({ core: { state: 'running' }, version: '0.1.0' });
+  manager.preparationSnapshot = () => ({ active: false, label: '', steps: [] });
   manager.readConfig = async () => ({ source: 'mixed-port: 7890', kind: 'manual' });
   manager.listBackups = async () => [{ id: '2026-01-01T00-00-00-000Z-manual.yaml', label: 'x', size: 10 }];
   manager.diagnostics = async () => ({ core: { running: true }, hints: ['测试提示'], network: { addresses: [], checks: [] } });
@@ -154,6 +155,9 @@ test('GET 接口返回状态、配置、日志与流量流', async t => {
   const { socket, manager } = await fixture(t);
   assert.equal((await socketRequest(socket, '/api/status', { headers: ADMIN })).status, 200);
   assert.match((await socketRequest(socket, '/api/config', { headers: ADMIN })).text, /mixed-port/);
+  const preparation = await socketRequest(socket, '/api/preparation', { headers: ADMIN });
+  assert.equal(preparation.status, 200);
+  assert.equal(JSON.parse(preparation.text).preparation.active, false);
   assert.equal((await socketRequest(socket, '/api/backups', { headers: ADMIN })).status, 200);
   assert.equal((await socketRequest(socket, '/api/logs?limit=10', { headers: ADMIN })).status, 200);
   const diagnostics = await socketRequest(socket, '/api/diagnostics', { headers: ADMIN });

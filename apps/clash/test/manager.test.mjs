@@ -36,7 +36,7 @@ async function setup(t, options = {}) {
   await writeFile(controlFile, JSON.stringify(options.control || {}));
   process.env.FAKE_CORE_CONTROL = controlFile;
   const manager = new ClashManager(root, {
-    appRoot, platform: 'linux', arch: 'x64', fetcher: options.fetcher, resolver: options.resolver, systemEnvironmentFile: options.systemEnvironmentFile, privilegedHelperDir: options.privilegedHelperDir, bootstrapData: false,
+    appRoot, platform: 'linux', arch: 'x64', fetcher: options.fetcher, resolver: options.resolver, systemEnvironmentFile: options.systemEnvironmentFile, privilegedHelperDir: options.privilegedHelperDir, bootstrapData: options.bootstrapData === true,
   });
   manager.validateCore = async () => ({ version: '1.19.33', flavor: 'MetaCubeX' });
   await manager.init();
@@ -561,4 +561,45 @@ test('日志与状态接口不会泄漏 Controller secret', async t => {
   const logText = JSON.stringify(manager.logsHistory());
   assert.doesNotMatch(logText, new RegExp(manager.state.controllerSecret));
   assert.match(status.core.activeId, /installed-one/);
+});
+
+test('首次启动下载外部数据时提供准备进度与字节进度', async t => {
+  const { manager } = await setup(t, { bootstrapData: true });
+  await addFakeCore(manager, 'installed-one');
+  await activateManually(manager, 'installed-one');
+  await manager.config.save(configSource(23473));
+  const requested = [];
+  manager.githubFetcher = async url => {
+    requested.push(String(url));
+    const body = (async function* () {
+      for (let index = 0; index < 4; index += 1) {
+        await sleep(30);
+        yield Buffer.alloc(8);
+      }
+    })();
+    return { ok: true, headers: new Map([['content-length', '32']]), body };
+  };
+
+  const startup = manager.startCore();
+  await waitFor(() => {
+    const snapshot = manager.preparationSnapshot();
+    return snapshot.active && snapshot.steps.some(step => step.state === 'active');
+  });
+  const during = manager.preparationSnapshot();
+  assert.equal(during.active, true);
+  assert.equal(during.label, '启动内核');
+  assert.ok(during.steps.some(step => step.label === '准备外部数据'));
+  await waitFor(() => manager.preparationSnapshot().received > 0);
+  const bytes = manager.preparationSnapshot();
+  assert.equal(bytes.bytesTotal, 32);
+  assert.ok(bytes.received > 0 && bytes.received <= 32);
+
+  await startup;
+  const finished = manager.preparationSnapshot();
+  assert.equal(finished.active, false);
+  assert.equal(finished.error, '');
+  assert.ok(finished.steps.every(step => step.state === 'done'));
+  assert.ok(requested.length >= 2, 'GeoIP 与 GeoSite 各下载一次');
+  assert.equal((await manager.dataReadiness()).ready, true);
+  assert.equal((await manager.status()).preparation.active, false);
 });

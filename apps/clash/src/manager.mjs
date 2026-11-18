@@ -15,6 +15,7 @@ import { LogHub } from './log-hub.mjs';
 import { redact } from './redact.mjs';
 import { CHANNELS, CoreRepository, channelConfig } from './repository.mjs';
 import { DATASETS, DATASET_KEYS, MODEL_LABELS, MODEL_URLS, datasetDefaults } from './datasets.mjs';
+import { PreparationProgress } from './progress.mjs';
 import { mirrorGithubUrl, normalizeMirror, unmirrorGithubUrl } from './mirror.mjs';
 import { configInfo, ensureTunDns, injectController, proxyProviders, setTunEnabled, topLevelValue } from './yaml.mjs';
 import { atomicJSON, atomicWrite, ensureDir, hashFile, pathExists, randomSecret, readJSON, removePath, safeId } from './storage.mjs';
@@ -25,6 +26,26 @@ const HEALTH_TIMEOUT = 15000;
 const MAX_RESTART_ATTEMPTS = 5;
 const AVAILABLE_TTL = 12 * 60 * 60 * 1000;
 const CORE_LEVELS = new Set(['debug', 'info', 'warning', 'error', 'silent']);
+
+// Step plans for the preparation progress shown in the page. Keys are shared by
+// startInternal()/validateConfig()/ensureCoreData() so nested calls map onto
+// whichever plan the current operation started with.
+const START_STEPS = [
+  { key: 'core', label: '校验内核' },
+  { key: 'data', label: '准备外部数据' },
+  { key: 'verify', label: '校验配置' },
+  { key: 'launch', label: '启动内核' },
+];
+const APPLY_STEPS = [
+  { key: 'data', label: '准备外部数据' },
+  { key: 'verify', label: '校验配置' },
+  { key: 'save', label: '保存配置' },
+  { key: 'launch', label: '应用配置' },
+];
+const VALIDATE_STEPS = [
+  { key: 'data', label: '准备外部数据' },
+  { key: 'verify', label: '校验配置' },
+];
 
 export function command(binary, args, { timeout = 20000, signal, cwd, input = '' } = {}) {
   return new Promise((resolve, reject) => {
@@ -87,6 +108,7 @@ export class ClashManager extends EventEmitter {
     this.systemEnvironmentFile = systemEnvironmentFile;
     this.privilegedHelperDir = privilegedHelperDir;
     this.bootstrapData = bootstrapData !== false;
+    this.preparation = new PreparationProgress({ now });
     this.capabilityError = '';
     this.resolver = resolver;
     this.repository = new CoreRepository({ fetcher, now, mirror: url => mirrorGithubUrl(url, this.state.githubMirror), unmirror: url => unmirrorGithubUrl(url, this.state.githubMirror) });
@@ -116,6 +138,7 @@ export class ClashManager extends EventEmitter {
     this.available = { channel: 'metacubex-stable', entries: [], checkedAt: '', error: '', fallback: false };
     this.job = { state: 'idle', action: '', id: '', message: '尚无操作', received: 0, total: 0 };
     this.jobTask = null; this.jobController = null; this.checking = false;
+    this.dataBootstrapTask = null;
     this.queue = Promise.resolve();
     this.closed = false; this.stoppingIntent = false;
     this.restartAttempts = 0; this.restartTimer = null; this.schedulerTimer = null; this.schedulerBusy = false; this.autoStartTask = null;
@@ -127,6 +150,31 @@ export class ClashManager extends EventEmitter {
     const next = this.queue.then(task, task);
     this.queue = next.catch(() => {});
     return next;
+  }
+
+  /**
+   * Run `task` while publishing multi-step progress. Nested calls (a config apply
+   * that restarts the core, a data download inside a test) reuse the active plan
+   * instead of replacing it.
+   */
+  async withPreparation(label, steps, task) {
+    if (this.preparation.active) return task();
+    this.preparation.start(label, steps);
+    this.emit('status');
+    try {
+      const result = await task();
+      this.preparation.done();
+      return result;
+    } catch (error) {
+      this.preparation.fail(error?.message || '操作失败');
+      throw error;
+    } finally {
+      this.emit('status');
+    }
+  }
+
+  preparationSnapshot() {
+    return this.preparation.snapshot();
   }
 
   log(level, message, source = 'app') {
@@ -221,7 +269,7 @@ export class ClashManager extends EventEmitter {
     this.startScheduler();
     if (this.state.autoStart && this.activeId) {
       this.coreState = 'starting';
-      this.autoStartTask = this.exclusive(() => this.startInternal({ fromAuto: true })).catch(error => {
+      this.autoStartTask = this.exclusive(() => this.withPreparation('启动内核', START_STEPS, () => this.startInternal({ fromAuto: true }))).catch(error => {
         this.coreState = 'error';
         this.lastError = error.message;
         this.log('error', `自动启动 Core 失败：${error.message}`);
@@ -365,27 +413,37 @@ export class ClashManager extends EventEmitter {
   }
 
   async ensureCoreData() {
-    if (!this.bootstrapData || this.dataBootstrapping) return;
-    this.dataBootstrapping = true;
-    try {
-      const required = ['geoip', 'geosite'];
-      if (this.state.channel === 'smart') required.push('model');
-      for (const key of required) {
-        const def = DATASETS.find(item => item.key === key);
-        if (!def || (await pathExists(path.join(this.runtimeDir, def.filename)))) continue;
-        try {
-          this.log('info', `首次准备外部数据：${def.name}`);
-          await this.syncData(key, { restart: false });
-        } catch (error) {
-          this.log('warning', `外部数据 ${def.name} 下载失败：${error.message}`);
-        }
+    if (!this.bootstrapData) return;
+    if (this.dataBootstrapTask) return this.dataBootstrapTask;
+    this.dataBootstrapTask = this.bootstrapCoreData().finally(() => { this.dataBootstrapTask = null; });
+    return this.dataBootstrapTask;
+  }
+
+  async bootstrapCoreData() {
+    const required = ['geoip', 'geosite'];
+    if (this.state.channel === 'smart') required.push('model');
+    const missing = [];
+    for (const key of required) {
+      const def = DATASETS.find(item => item.key === key);
+      if (!def) continue;
+      if (!(await pathExists(path.join(this.runtimeDir, def.filename)))) missing.push(def);
+    }
+    for (const [index, def] of missing.entries()) {
+      this.preparation.step('data', `正在下载 ${def.name}（${index + 1}/${missing.length}），首次运行耗时较长`);
+      try {
+        this.log('info', `首次准备外部数据：${def.name}（${index + 1}/${missing.length}）`);
+        await this.syncData(def.key, { restart: false });
+      } catch (error) {
+        this.log('warning', `外部数据 ${def.name} 下载失败：${error.message}`);
+        this.preparation.detail(`${def.name} 下载失败：${error.message}`);
       }
-    } finally { this.dataBootstrapping = false; }
+    }
   }
 
   async testConfig(entry) {
-    await this.ensureCoreData();
     await this.ensureGeodata();
+    await this.ensureCoreData();
+    this.preparation.step('verify', '正在使用 mihomo -t 校验配置');
     try {
       await this.run(entry.path, ['-t', '-d', this.runtimeDir, '-f', this.runtimeConfigPath], { timeout: 25000 });
     } catch (error) {
@@ -472,6 +530,7 @@ export class ClashManager extends EventEmitter {
     if (this.closed) fail('管理服务正在停止', 503);
     if (this.coreState === 'running' || (this.coreState === 'starting' && !fromAuto)) return this.coreSnapshot();
     if (!this.platformSupported()) fail('本机预览无法启动 Linux Core，请在 fnOS 设备上使用。', 409);
+    this.preparation.step('core', '正在校验内核文件、摘要与架构');
     const entry = await this.requireActiveEntry();
     const validated = await this.validateCore(entry);
     const sourceInfo = (await this.config.read()).info;
@@ -483,6 +542,7 @@ export class ClashManager extends EventEmitter {
     await this.testConfig(entry);
     await removePath(this.socketPath).catch(() => {});
     this.stoppingIntent = false;
+    this.preparation.step('launch', '正在启动内核进程');
     this.coreState = 'starting';
     this.lastError = '';
     this.runtimeMode = '';
@@ -505,6 +565,7 @@ export class ClashManager extends EventEmitter {
     }
     try {
       await this.waitHealthy();
+      this.preparation.detail('内核已就绪，正在读取运行状态');
     } catch (error) {
       this.stoppingIntent = true;
       await this.core?.stop();
@@ -551,7 +612,7 @@ export class ClashManager extends EventEmitter {
       this.log('warning', `将在 ${Math.round(delay / 1000)} 秒后自动重启 Core（第 ${this.restartAttempts} 次）`);
       clearTimeout(this.restartTimer);
       this.restartTimer = setTimeout(() => {
-        this.exclusive(() => this.startInternal()).catch(error => {
+        this.exclusive(() => this.withPreparation('自动重启内核', START_STEPS, () => this.startInternal())).catch(error => {
           this.lastError = error.message;
           this.log('error', `自动重启失败：${error.message}`);
         });
@@ -592,7 +653,7 @@ export class ClashManager extends EventEmitter {
       await this.autoStartTask;
       return this.status();
     }
-    return this.exclusive(() => { this.assertNoJob(); return this.startInternal(options); });
+    return this.exclusive(() => this.withPreparation('启动内核', START_STEPS, () => { this.assertNoJob(); return this.startInternal(options); }));
   }
 
   stopCore() {
@@ -606,12 +667,12 @@ export class ClashManager extends EventEmitter {
   }
 
   restartCore(options = {}) {
-    return this.exclusive(async () => {
+    return this.exclusive(() => this.withPreparation('重启内核', START_STEPS, async () => {
       this.assertNoJob();
       await this.stopInternal();
       await this.startInternal(options);
       return this.status();
-    });
+    }));
   }
 
   async refreshSummary() {
@@ -1051,6 +1112,8 @@ export class ClashManager extends EventEmitter {
       versions: await this.versionSummary(),
       subscriptions: this.config.listSubscriptions(),
       job: this.jobSnapshot(),
+      preparation: this.preparationSnapshot(),
+      readiness: await this.dataReadiness(),
     };
   }
 
@@ -1500,7 +1563,11 @@ export class ClashManager extends EventEmitter {
     return this.exclusive(() => { this.assertNoJob(); return this.applyConfig(source, { kind: 'manual' }); });
   }
 
-  async applyConfig(source, { kind = 'manual', subscriptionId = '', password = '', user = '' } = {}) {
+  async applyConfig(source, options = {}) {
+    return this.withPreparation('应用配置', APPLY_STEPS, () => this.applyConfigInternal(source, options));
+  }
+
+  async applyConfigInternal(source, { kind = 'manual', subscriptionId = '', password = '', user = '' } = {}) {
     const current = await this.config.read();
     if (source === current.source) {
       this.log('info', '配置无变化，未保存');
@@ -1511,6 +1578,7 @@ export class ClashManager extends EventEmitter {
     // Validate before touching the stored configuration so a failed save leaves no backup.
     await this.validateConfig(source);
     const wasRunning = this.coreState === 'running' || this.coreState === 'starting';
+    this.preparation.step('save', '正在保存配置并创建备份');
     const saved = await this.config.save(source, { kind, subscriptionId });
     if (this.state.networkManaged !== true) await this.adoptNetworkSettings(saved.info);
     try {
@@ -1518,6 +1586,7 @@ export class ClashManager extends EventEmitter {
         await this.stopInternal();
         await this.startInternal({ password, user });
       } else {
+        this.preparation.step('launch', '正在写入运行配置并校验');
         await this.config.writeRuntime(this.runtimeConfigPath, { logLevel: this.state.logLevel, network: this.networkSettings(), health: this.healthSettings() });
         const entry = await this.requireActiveEntry();
         await this.applyCoreCapabilities(entry.path, { password, user });
@@ -1548,19 +1617,24 @@ export class ClashManager extends EventEmitter {
   }
 
   async validateConfig(source) {
-    const runtimePath = path.join(this.runtimeDir, 'validate.yaml');
-    try {
-      const content = injectController(source, { socketPath: this.socketPath, secret: this.state.controllerSecret, logLevel: this.state.logLevel, network: this.networkSettings() });
-      await atomicWrite(runtimePath, content, 0o600);
-      const entry = await this.requireActiveEntry();
-      await this.run(entry.path, ['-t', '-d', this.runtimeDir, '-f', runtimePath], { timeout: 25000 });
-      return { ok: true, info: this.effectiveInfo(configInfo(source)) };
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      fail(`配置校验失败：${redact(error.message, [this.state.controllerSecret]).split('\n').slice(-4).join(' ').slice(0, 600)}`);
-    } finally {
-      await removePath(runtimePath).catch(() => {});
-    }
+    return this.withPreparation('校验配置', VALIDATE_STEPS, async () => {
+      await this.ensureGeodata();
+      await this.ensureCoreData();
+      const runtimePath = path.join(this.runtimeDir, 'validate.yaml');
+      try {
+        const content = injectController(source, { socketPath: this.socketPath, secret: this.state.controllerSecret, logLevel: this.state.logLevel, network: this.networkSettings() });
+        await atomicWrite(runtimePath, content, 0o600);
+        const entry = await this.requireActiveEntry();
+        this.preparation.step('verify', '正在使用 mihomo -t 校验配置');
+        await this.run(entry.path, ['-t', '-d', this.runtimeDir, '-f', runtimePath], { timeout: 25000 });
+        return { ok: true, info: this.effectiveInfo(configInfo(source)) };
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        fail(`配置校验失败：${redact(error.message, [this.state.controllerSecret]).split('\n').slice(-4).join(' ').slice(0, 600)}`);
+      } finally {
+        await removePath(runtimePath).catch(() => {});
+      }
+    });
   }
 
   async listBackups() { return this.config.listBackups(); }
@@ -1595,22 +1669,29 @@ export class ClashManager extends EventEmitter {
   async restoreBackup(id) { return this.exclusive(() => { this.assertNoJob(); return this.restoreBackupInternal(id); }); }
 
   async restoreBackupInternal(id) {
-    const restored = await this.config.restoreBackup(id);
-    const wasRunning = this.coreState === 'running';
-    try {
-      if (wasRunning) { await this.stopInternal(); await this.startInternal(); }
-      else {
-        await this.config.writeRuntime(this.runtimeConfigPath, { logLevel: this.state.logLevel, network: this.networkSettings(), health: this.healthSettings() });
-        const entry = await this.requireActiveEntry();
-        await this.testConfig(entry);
+    return this.withPreparation('恢复配置备份', [
+      { key: 'data', label: '准备外部数据' },
+      { key: 'verify', label: '校验配置' },
+      { key: 'launch', label: '恢复配置' },
+    ], async () => {
+      const restored = await this.config.restoreBackup(id);
+      const wasRunning = this.coreState === 'running';
+      try {
+        if (wasRunning) { await this.stopInternal(); await this.startInternal(); }
+        else {
+          this.preparation.step('launch', '正在校验恢复后的配置');
+          await this.config.writeRuntime(this.runtimeConfigPath, { logLevel: this.state.logLevel, network: this.networkSettings(), health: this.healthSettings() });
+          const entry = await this.requireActiveEntry();
+          await this.testConfig(entry);
+        }
+      } catch (error) {
+        await this.config.rollback(restored);
+        if (wasRunning) await this.startInternal().catch(() => {});
+        fail(`恢复备份失败：${error.message}`);
       }
-    } catch (error) {
-      await this.config.rollback(restored);
-      if (wasRunning) await this.startInternal().catch(() => {});
-      fail(`恢复备份失败：${error.message}`);
-    }
-    this.log('info', '已从备份恢复配置');
-    return this.status();
+      this.log('info', '已从备份恢复配置');
+      return this.status();
+    });
   }
 
   async addSubscription(input) {
@@ -1673,6 +1754,23 @@ export class ClashManager extends EventEmitter {
     };
   }
 
+  /** Required datasets that the first start would still have to download. */
+  async dataReadiness() {
+    const required = ['geoip', 'geosite'];
+    if (this.state.channel === 'smart') required.push('model');
+    const missing = [];
+    for (const key of required) {
+      const def = DATASETS.find(item => item.key === key);
+      if (def && !(await pathExists(path.join(this.runtimeDir, def.filename)))) missing.push(key);
+    }
+    return {
+      ready: missing.length === 0,
+      missing,
+      channel: this.state.channel,
+      names: missing.map(key => DATASETS.find(item => item.key === key)?.name || key),
+    };
+  }
+
   async dataStatus() {
     await this.ensureGeodata().catch(() => {});
     const items = [];
@@ -1728,25 +1826,36 @@ export class ClashManager extends EventEmitter {
   async syncData(key, { restart = true, url: overrideUrl = '' } = {}) {
     const def = DATASETS.find(item => item.key === key);
     if (!def) fail('未知的数据类型');
+    return this.withPreparation(`同步${def.name}`, [
+      { key: 'download', label: `下载${def.name}` },
+      { key: 'restart', label: '重启内核以加载数据' },
+    ], () => this.syncDataInternal(def, { restart, overrideUrl }));
+  }
+
+  async syncDataInternal(def, { restart = true, overrideUrl = '' } = {}) {
     if (overrideUrl) {
       let parsedOverride;
       try { parsedOverride = new URL(String(overrideUrl)); } catch { fail('数据更新地址无效'); }
       if (!['http:', 'https:'].includes(parsedOverride.protocol) || parsedOverride.username || parsedOverride.password) fail('数据更新地址必须是 HTTP/HTTPS');
-      this.state.dataUrls[key] = parsedOverride.href;
+      this.state.dataUrls[def.key] = parsedOverride.href;
       await this.saveState();
     }
-    const url = this.state.dataUrls[key];
+    const url = this.state.dataUrls[def.key];
     let parsed;
     try { parsed = new URL(url); } catch { fail('数据更新地址无效'); }
     if (!['http:', 'https:'].includes(parsed.protocol)) fail('数据更新地址必须是 HTTP/HTTPS');
+    if (this.preparation.has('download')) this.preparation.step('download', `正在下载${def.name}`);
     const response = await this.githubFetcher(parsed.href, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(120000), headers: { 'user-agent': 'fnos-clash-manager' } });
     if (!response.ok) fail(`数据下载失败：HTTP ${response.status}`, 502);
+    const expected = Number(response.headers?.get?.('content-length')) || 0;
     const chunks = [];
     let size = 0;
+    this.preparation.bytes(0, expected);
     for await (const chunk of response.body) {
       size += chunk.length;
       if (size > 128 * 1024 * 1024) fail('数据文件超过 128 MiB 限制');
       chunks.push(Buffer.from(chunk));
+      this.preparation.bytes(size, expected);
     }
     if (!size) fail('数据文件为空');
     await ensureDir(this.runtimeDir, 0o700);
@@ -1754,28 +1863,36 @@ export class ClashManager extends EventEmitter {
     const temporary = `${destination}.tmp-${process.pid}`;
     await writeFile(temporary, Buffer.concat(chunks), { mode: 0o644 });
     await rename(temporary, destination);
-    this.state.dataUpdatedAt[key] = new Date(this.now()).toISOString();
+    this.state.dataUpdatedAt[def.key] = new Date(this.now()).toISOString();
     await this.saveState();
     this.log('info', `已更新外部数据 ${def.name}（${size} 字节）`);
     if (restart && this.coreState === 'running') {
       try {
+        this.preparation.step('restart', '正在重启内核以加载新数据');
         await this.exclusive(async () => { await this.stopInternal(); await this.startInternal(); });
         this.log('info', '外部数据已应用，Core 已重启');
       } catch (error) { this.log('warning', `外部数据已更新，但 Core 重启失败：${error.message}`); }
     }
-    return { key, filename: def.filename, size, updatedAt: this.state.dataUpdatedAt[key] };
+    return { key: def.key, filename: def.filename, size, updatedAt: this.state.dataUpdatedAt[def.key] };
   }
 
   async syncAllData({ restart = true } = {}) {
-    const results = [];
-    for (const key of DATASET_KEYS) results.push(await this.syncData(key, { restart: false }));
-    if (restart && this.coreState === 'running') {
-      try {
-        await this.exclusive(async () => { await this.stopInternal(); await this.startInternal(); });
-        this.log('info', '外部数据已全部应用，Core 已重启');
-      } catch (error) { this.log('warning', `外部数据已更新，但 Core 重启失败：${error.message}`); }
-    }
-    return results;
+    const steps = DATASETS.map(def => ({ key: def.key, label: def.name })).concat({ key: 'restart', label: '重启内核以加载数据' });
+    return this.withPreparation('同步外部数据', steps, async () => {
+      const results = [];
+      for (const def of DATASETS) {
+        this.preparation.step(def.key, `正在下载${def.name}`);
+        results.push(await this.syncData(def.key, { restart: false }));
+      }
+      if (restart && this.coreState === 'running') {
+        try {
+          this.preparation.step('restart', '正在重启内核以加载新数据');
+          await this.exclusive(async () => { await this.stopInternal(); await this.startInternal(); });
+          this.log('info', '外部数据已全部应用，Core 已重启');
+        } catch (error) { this.log('warning', `外部数据已更新，但 Core 重启失败：${error.message}`); }
+      }
+      return results;
+    });
   }
 
   healthSettings() {

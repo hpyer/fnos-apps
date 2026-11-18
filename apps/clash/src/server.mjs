@@ -140,6 +140,7 @@ export async function serve(manager, { assets, socket, devPort, getCredentialKey
             return json(response, 200, { publicKey: JSON.stringify({ kty: 'EC', crv: 'P-256', x: pub.subarray(1, 33).toString('base64url'), y: pub.subarray(33).toString('base64url') }) });
           }
           case `${PREFIX}/api/status`: return json(response, 200, await manager.status());
+          case `${PREFIX}/api/preparation`: return json(response, 200, { preparation: manager.preparationSnapshot() });
           case `${PREFIX}/api/update`: return json(response, 200, await checkUpdate());
           case `${PREFIX}/api/config`: return json(response, 200, await manager.readConfig());
           case `${PREFIX}/api/backups`: return json(response, 200, { backups: await manager.listBackups() });

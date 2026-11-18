@@ -20,6 +20,11 @@ const state = {
   starting: false,
   data: null,
   jobState: 'idle',
+  preparation: null,
+  prepareTimer: 0,
+  prepareWatchUntil: 0,
+  prepareStartedAt: 0,
+  prepareCollapsed: false,
   editingSubscription: '',
   expandedProviders: new Set(),
   expandedGroups: new Set(),
@@ -153,7 +158,7 @@ async function act(task, successMessage, { silent = false } = {}) {
 }
 
 /** Run a privileged task; on permission failure ask for the admin password once and retry. */
-async function privilegedAct(task, successMessage, { silent = false } = {}) {
+async function privilegedAct(task, successMessage, { silent = false, softError = false } = {}) {
   const first = await act(task, '', { silent: true });
   if (first) {
     if (successMessage && !silent) notify(successMessage, 'success');
@@ -162,7 +167,7 @@ async function privilegedAct(task, successMessage, { silent = false } = {}) {
   const error = state.lastError;
   if (!error) return null;
   if (!/需要 root|服务模式未初始化|拒绝提权|权限|管理员/.test(error)) {
-    notify(error, 'error', 6500);
+    if (!softError) notify(error, 'error', 6500);
     return null;
   }
   const password = await askPassword('管理员授权', '此操作需要 NAS 管理员权限。请输入管理员账号的密码以完成一次提权（密码不会被保存）。');
@@ -310,11 +315,14 @@ async function refreshStatus() {
       state.connections = { connections: [], uploadTotal: 0, downloadTotal: 0 };
     }
     state.status = status;
+    if (status.preparation?.active || !state.preparation?.active) state.preparation = status.preparation || state.preparation;
+    if (state.preparation?.active) watchPreparation();
     renderSidebar(status);
     renderMetrics(status);
     renderQuickGroup();
     renderSubscriptions();
     updateConfigMeta();
+    renderPreparation();
     renderSettingsForm(false);
     if (state.view === 'settings') renderCoreVersions();
     renderJob();
@@ -324,6 +332,101 @@ async function refreshStatus() {
     $('side-state').textContent = '连接失败';
     $('side-core').textContent = error.message;
   }
+}
+
+/* --------------------------------------------------------------- prepare */
+
+async function fetchPreparation() {
+  try {
+    const data = await get('preparation');
+    return data?.preparation || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Poll quickly while a long first-run operation may be running. */
+function watchPreparation(graceMs = 8000) {
+  state.prepareWatchUntil = Math.max(state.prepareWatchUntil, Date.now() + graceMs);
+  if (state.prepareTimer) return;
+  state.prepareTimer = window.setInterval(async () => {
+    const preparation = await fetchPreparation();
+    if (preparation) {
+      state.preparation = preparation;
+      renderPreparation();
+    }
+    if (!state.preparation?.active && Date.now() > state.prepareWatchUntil) stopPreparationPolling();
+  }, 900);
+}
+
+function stopPreparationPolling() {
+  if (!state.prepareTimer) return;
+  window.clearInterval(state.prepareTimer);
+  state.prepareTimer = 0;
+}
+
+function applyPreparationCollapsed() {
+  const button = $('prepare-toggle');
+  const collapsed = state.prepareCollapsed === true;
+  $('prepare-panel').classList.toggle('is-collapsed', collapsed);
+  button.textContent = collapsed ? '+' : '–';
+  button.title = collapsed ? '展开进度' : '收起进度';
+  button.setAttribute('aria-label', button.title);
+  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function togglePreparation() {
+  state.prepareCollapsed = !state.prepareCollapsed;
+  applyPreparationCollapsed();
+}
+
+function renderPreparation() {
+  const preparation = state.preparation;
+  const panel = $('prepare-panel');
+  if (!preparation?.active) {
+    panel.hidden = true;
+    return;
+  }
+  if (preparation.startedAt !== state.prepareStartedAt) {
+    state.prepareStartedAt = preparation.startedAt;
+    state.prepareCollapsed = false;
+  }
+  panel.hidden = false;
+  applyPreparationCollapsed();
+  $('prepare-title').textContent = preparation.label || '准备中';
+  $('prepare-message').textContent = preparation.message || '正在处理…';
+  $('prepare-elapsed').textContent = preparation.elapsedMs >= 1000 ? formatDuration(preparation.elapsedMs) : '刚刚开始';
+  $('prepare-steps').replaceChildren(...(preparation.steps || []).map(step => {
+    const item = node('li', step.label);
+    if (step.state === 'active') item.className = 'is-active';
+    else if (step.state === 'done') item.className = 'is-done';
+    else if (step.state === 'error') item.className = 'is-error';
+    return item;
+  }));
+  const bar = $('prepare-bar');
+  if (preparation.bytesTotal > 0) {
+    const percent = Math.min(100, Math.round((preparation.received / preparation.bytesTotal) * 100));
+    bar.value = percent;
+    $('prepare-bytes').textContent = `${formatBytes(preparation.received)} / ${formatBytes(preparation.bytesTotal)} · ${percent}%`;
+  } else if (preparation.received > 0) {
+    bar.removeAttribute('value');
+    $('prepare-bytes').textContent = `已接收 ${formatBytes(preparation.received)}`;
+  } else {
+    bar.removeAttribute('value');
+    $('prepare-bytes').textContent = '';
+  }
+}
+
+/** A long operation may outlive the gateway timeout; keep the progress visible instead of a false error. */
+async function reportLongActionError(fallbackMessage) {
+  const preparation = await fetchPreparation();
+  if (preparation?.active) {
+    state.preparation = preparation;
+    renderPreparation();
+    watchPreparation();
+    return notify('操作仍在后台进行，请查看进度浮窗，稍后再刷新状态', 'info', 7000);
+  }
+  notify(state.lastError || fallbackMessage, 'error', 6500);
 }
 
 /* --------------------------------------------------------------- proxies */
@@ -518,6 +621,7 @@ function renderProxies() {
 
   const providerNodes = providers.map(provider => providerCard(provider, search)).filter(Boolean);
   $('node-providers').replaceChildren(...(providerNodes.length ? providerNodes : [node('p', search ? '没有匹配的提供商' : '配置中未定义 proxy-providers', 'empty')]));
+
   const groupRows = groups.map(group => groupRow(group, search)).filter(Boolean);
   $('group-list').replaceChildren(...(groupRows.length ? groupRows : [node('p', search ? '没有匹配的策略组' : '配置中没有策略组', 'empty')]));
   updateToggleLabels();
@@ -677,7 +781,6 @@ function updateConfigMeta() {
   if (!config) return;
   $('config-meta').textContent = `${configKindLabel(config.kind)} · ${formatTime(config.updatedAt)} · ${formatBytes(config.size)}`;
 }
-
 function backupLabel(label) {
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(String(label));
   return match ? `${match[1]} ${match[2]}:${match[3]}:${match[4]}` : String(label);
@@ -744,11 +847,12 @@ function wireConfig() {
     if (!source.trim()) return notify('配置内容不能为空', 'warning');
     const buttonEl = $('save-config');
     buttonEl.disabled = true;
-    buttonEl.textContent = '校验并应用中…';
+    buttonEl.textContent = '准备并应用中…';
+    watchPreparation();
     const result = await act(() => post('config/save', { source }), '', { silent: true });
     buttonEl.disabled = false;
     buttonEl.textContent = '保存并应用';
-    if (!result) return;
+    if (!result) return reportLongActionError('配置应用失败');
     if (result.configSaved === false) notify('配置无变化，未保存', 'info');
     else notify('配置已校验、保存并应用', 'success');
     state.configLoaded = false;
@@ -760,13 +864,13 @@ function wireConfig() {
   $('validate-config').addEventListener('click', async () => {
     const buttonEl = $('validate-config');
     buttonEl.disabled = true;
+    watchPreparation();
     const result = await act(() => post('config/validate', { source: $('config-source').value }), '', { silent: true });
     buttonEl.disabled = false;
-    if (result) {
-      const info = result.info || {};
-      const ports = Object.entries(info.ports || {}).map(([name, port]) => `${name}:${port}`).join('，') || '未配置端口';
-      notify(`配置校验通过（${ports}）`, 'success', 5000);
-    }
+    if (!result) return reportLongActionError('配置校验失败');
+    const info = result.info || {};
+    const ports = Object.entries(info.ports || {}).map(([name, port]) => `${name}:${port}`).join('，') || '未配置端口';
+    notify(`配置校验通过（${ports}）`, 'success', 5000);
   });
   $('refresh-config').addEventListener('click', async () => {
     if (state.configDirty && !(await askConfirm('重新载入配置', '当前编辑内容尚未保存，重新载入会丢弃这些修改。'))) return;
@@ -776,6 +880,7 @@ function wireConfig() {
     const id = $('backup-select').value;
     if (!id) return notify('请选择一个备份', 'warning');
     if (!(await askConfirm('恢复配置备份', '将使用所选备份替换当前配置，并重启内核。'))) return;
+    watchPreparation();
     const result = await act(() => post('config/restore', { id }), '配置已从备份恢复');
     if (result) {
       state.configLoaded = false;
@@ -839,6 +944,7 @@ function renderSubscriptions() {
 async function runSubscriptionAction(action, id, message, reloadConfig = false) {
   const buttonEls = [...document.querySelectorAll('.subscription-actions button')];
   for (const item of buttonEls) item.disabled = true;
+  if (reloadConfig) watchPreparation();
   const result = await act(() => post(action, { id }), message);
   for (const item of buttonEls) item.disabled = false;
   if (result) {
@@ -1008,6 +1114,7 @@ function renderData() {
     sync.addEventListener('click', async () => {
       sync.disabled = true;
       sync.textContent = '同步中…';
+      watchPreparation();
       const result = await act(() => post('data/sync', { key: item.key, url: input.value.trim() }), `${item.name} 已同步`);
       sync.disabled = false;
       sync.textContent = '立即同步';
@@ -1151,6 +1258,7 @@ function wireSettings() {
     const button = $('sync-all-data');
     button.disabled = true;
     button.textContent = '同步中…';
+    watchPreparation();
     const result = await act(() => post('data/sync-all', {}), '外部数据已全部同步');
     button.disabled = false;
     button.textContent = '全部立即同步';
@@ -1195,6 +1303,7 @@ function wireSettings() {
     if (!data) return;
     const lines = [
       `应用版本：${data.app?.version || '—'}`,
+      `User-Agent：${data.userAgent || '—'}`,
       `内核：${data.core?.running ? `运行中 ${data.core.version || ''}` : '未运行'}（${data.core?.activeId || '未选择版本'}）`,
       `Core 路径：${data.core?.path || '—'}`,
       `Core 挂载：${data.core?.mountOptions || '未知'}`,
@@ -1327,9 +1436,11 @@ function wireSideControls() {
     if (state.starting) return;
     state.starting = true;
     if (state.status) renderSidebar(state.status);
+    watchPreparation();
     try {
-      const result = await privilegedAct(async password => post('core/start', { password }), '内核已启动');
+      const result = await privilegedAct(async password => post('core/start', { password }), '内核已启动', { softError: true });
       if (result) refreshProxies();
+      else await reportLongActionError('内核启动失败');
     } finally {
       state.starting = false;
       await refreshStatus();
@@ -1342,8 +1453,10 @@ function wireSideControls() {
   });
   $('side-restart').addEventListener('click', async () => {
     if (!(await askConfirm('重启内核', '将短暂中断代理连接。'))) return;
-    const result = await privilegedAct(async password => post('core/restart', { password }), '内核已重启');
+    watchPreparation();
+    const result = await privilegedAct(async password => post('core/restart', { password }), '内核已重启', { softError: true });
     if (result) { await refreshStatus(); refreshProxies(); }
+    else await reportLongActionError('内核重启失败');
   });
   const systemProxyInputs = [$('toggle-system-proxy'), $('set-system-proxy')];
   const tunInputs = [$('toggle-tun'), $('set-tun')];
@@ -1408,6 +1521,7 @@ async function main() {
   wireProxies();
   wireConnections();
   wireConfig();
+  $('prepare-toggle').addEventListener('click', togglePreparation);
   wireSubscriptions();
   wireLogs();
   wireSettings();

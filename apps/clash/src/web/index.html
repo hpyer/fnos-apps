@@ -247,5 +247,22 @@
     <div class="dialog-body"><p id="confirm-text" class="confirm-text">—</p></div>
     <div class="dialog-foot"><button type="button" data-close="confirm-dialog">取消</button><button id="confirm-accept" type="button" class="danger">确认</button></div>
   </dialog>
+
+  <aside id="prepare-panel" class="prepare-panel" role="status" aria-live="polite" hidden>
+    <div class="prepare-head">
+      <span class="prepare-spinner" aria-hidden="true"></span>
+      <div class="prepare-copy">
+        <strong id="prepare-title">启动内核</strong>
+        <span id="prepare-elapsed" class="prepare-elapsed muted">刚刚开始</span>
+      </div>
+      <button id="prepare-toggle" type="button" class="prepare-toggle" title="收起进度" aria-label="收起进度" aria-expanded="true">–</button>
+    </div>
+    <p id="prepare-message" class="prepare-message">—</p>
+    <ol id="prepare-steps" class="prepare-steps"></ol>
+    <div class="prepare-bar">
+      <progress id="prepare-bar" max="100"></progress>
+      <span id="prepare-bytes" class="muted"></span>
+    </div>
+  </aside>
 </body>
 </html>
