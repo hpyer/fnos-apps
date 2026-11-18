@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1]
+
+### Fixed
+
+- x86 安装包改用 mihomo `amd64-compatible` 内核，修复旧款 x86_64 CPU 缺少 x86-64-v3 指令集时启动失败的问题。
+- 在线安装稳定版 Core 时优先选择 `amd64-compatible` 资产，避免在旧 CPU 上再次安装不兼容内核。
+
 ## [1.0.0]
 
 ### Added

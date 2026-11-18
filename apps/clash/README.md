@@ -110,6 +110,7 @@ curl -I https://1.1.1.1
 ### Core 版本
 
 - 支持 MetaCubeX 稳定版、`Prerelease-Alpha` 测试版和 `vernesong/mihomo` Smart 版。
+- x86 内置 Core 和在线稳定版优先使用 `amd64-compatible` 构建，兼容不支持 x86-64-v3 的旧款 CPU；ARM64 使用标准 arm64 构建。
 - 在线安装需要 GitHub API 提供的 SHA-256 和大小；API 限流时使用 releases Atom/资产页面，下载后计算 SHA-256、校验 gzip、ELF 架构和版本输出。
 - 启用前重新校验文件哈希和配置；失败恢复旧版本和旧配置。
 

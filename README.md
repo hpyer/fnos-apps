@@ -10,7 +10,7 @@
 | [Xterm for fnOS](apps/xterm/README.md) | `1.1.1` | 管理员专用本机 Bash 终端，以应用包用户运行，断开后结束会话。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=Xterm+for+fnOS&expanded=true) |
 | [Nginx for fnOS](apps/nginx/README.md) | `1.1.1` | 以应用用户管理 Nginx 官方版本、高端口站点与主配置，支持校验、平滑重载和证书更新通知。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=Nginx+for+fnOS&expanded=true) |
 | [FFmpeg for fnOS](apps/ffmpeg/README.md) | `0.1.0` | 按架构下载独立 ffmpeg，可选 ffprobe，支持全局命令、多版本切换与回滚。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=FFmpeg+for+fnOS&expanded=true) |
-| [Clash for fnOS](apps/clash/README.md) | `1.0.0` | 按架构内置 mihomo Core，托管配置、订阅、代理组、连接、日志、系统代理、TUN 和外部数据管理。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=Clash+for+fnOS&expanded=true) |
+| [Clash for fnOS](apps/clash/README.md) | `1.0.1` | 按架构内置 mihomo Core，托管配置、订阅、代理组、连接、日志、系统代理、TUN 和外部数据管理。 | [GitHub](https://github.com/hpyer/fnos-apps/releases?q=Clash+for+fnOS&expanded=true) |
 
 ## 快速开始
 
