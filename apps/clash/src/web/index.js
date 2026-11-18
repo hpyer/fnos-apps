@@ -1110,6 +1110,8 @@ function renderSettingsForm(force = false) {
     $('set-unified-delay').checked = status.settings.unifiedDelay !== false;
     $('set-tcp-concurrent').checked = status.settings.tcpConcurrent !== false;
     $('set-github-mirror').value = status.settings.githubMirror ?? 'https://ghfast.top/';
+    $('set-ua-prefix').textContent = status.settings.userAgentPrefix || '—';
+    $('set-ua-suffix').value = status.settings.userAgentSuffix ?? 'clash.meta; clash';
     $('set-loglevel').value = status.settings.logLevel;
     const channels = status.versions.channels || [];
     const select = $('set-channel');
@@ -1266,7 +1268,7 @@ async function confirmCoreAction(action, item) {
 }
 
 function wireSettings() {
-  for (const element of [$('set-autostart'), $('set-autorestart'), $('set-allow-lan'), $('set-mixed-port'), $('set-http-port'), $('set-socks-port'), $('set-delay-interval'), $('set-delay-url'), $('set-delay-concurrency'), $('set-unified-delay'), $('set-tcp-concurrent'), $('set-github-mirror'), $('set-loglevel'), $('set-channel')]) {
+  for (const element of [$('set-autostart'), $('set-autorestart'), $('set-allow-lan'), $('set-mixed-port'), $('set-http-port'), $('set-socks-port'), $('set-delay-interval'), $('set-delay-url'), $('set-delay-concurrency'), $('set-unified-delay'), $('set-tcp-concurrent'), $('set-github-mirror'), $('set-ua-suffix'), $('set-loglevel'), $('set-channel')]) {
     const event = ['number', 'text', 'url'].includes(element.type) ? 'input' : 'change';
     element.addEventListener(event, () => { state.settingsDirty = true; });
   }
@@ -1286,6 +1288,7 @@ function wireSettings() {
       unifiedDelay: $('set-unified-delay').checked,
       tcpConcurrent: $('set-tcp-concurrent').checked,
       githubMirror: $('set-github-mirror').value.trim(),
+      userAgentSuffix: $('set-ua-suffix').value.trim(),
       password,
     }), '设置已保存');
     if (result) { state.settingsDirty = false; await refreshStatus(); renderSettingsForm(true); }
@@ -1338,6 +1341,7 @@ function wireSettings() {
           unifiedDelay: $('set-unified-delay').checked,
           tcpConcurrent: $('set-tcp-concurrent').checked,
           githubMirror: $('set-github-mirror').value.trim(),
+          userAgentSuffix: $('set-ua-suffix').value.trim(),
           password,
         });
         state.settingsDirty = false;

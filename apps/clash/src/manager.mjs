@@ -27,6 +27,16 @@ const HEALTH_TIMEOUT = 15000;
 const MAX_RESTART_ATTEMPTS = 5;
 const AVAILABLE_TTL = 12 * 60 * 60 * 1000;
 const CORE_LEVELS = new Set(['debug', 'info', 'warning', 'error', 'silent']);
+const DEFAULT_USER_AGENT_SUFFIX = 'clash.meta; clash';
+const USER_AGENT_SUFFIX_MAX = 200;
+
+/** The custom part after the generated "Mihomo/...; ClashForFNOS/..." prefix. */
+export function normalizeUserAgentSuffix(value) {
+  const text = String(value ?? '').trim();
+  if (text.length > USER_AGENT_SUFFIX_MAX) fail(`User-Agent 自定义部分不能超过 ${USER_AGENT_SUFFIX_MAX} 个字符`);
+  if (!/^[\x20-\x7e]*$/.test(text)) fail('User-Agent 自定义部分只能包含 ASCII 可见字符');
+  return text;
+}
 
 // Step plans for the preparation progress shown in the page. Keys are shared by
 // startInternal()/validateConfig()/ensureCoreData() so nested calls map onto
@@ -103,6 +113,8 @@ export class ClashManager extends EventEmitter {
     this.platform = platform;
     this.arch = arch;
     this.fetcher = fetcher;
+    this.userAgentPrefix = '';
+    const fetchWithAgent = (url, options) => this.fetcher(url, this.withUserAgent(options));
     this.run = run;
     this.now = now;
     this.extract = extract;
@@ -112,7 +124,7 @@ export class ClashManager extends EventEmitter {
     this.preparation = new PreparationProgress({ now });
     this.capabilityError = '';
     this.resolver = resolver;
-    this.repository = new CoreRepository({ fetcher, now, mirror: url => mirrorGithubUrl(url, this.state.githubMirror), unmirror: url => unmirrorGithubUrl(url, this.state.githubMirror) });
+    this.repository = new CoreRepository({ fetcher: fetchWithAgent, now, mirror: url => mirrorGithubUrl(url, this.state.githubMirror), unmirror: url => unmirrorGithubUrl(url, this.state.githubMirror) });
     this.runtimeDir = path.join(root, 'runtime');
     this.socketPath = path.join(this.runtimeDir, 'controller.sock');
     this.runtimeConfigPath = path.join(this.runtimeDir, 'config.yaml');
@@ -128,6 +140,7 @@ export class ClashManager extends EventEmitter {
       mixedPort: 0, httpPort: 0, socksPort: 0, allowLan: null, networkManaged: false, autoSystemProxy: false,
       githubMirror: 'https://ghfast.top/',
       delayIntervalMinutes: 30, delayTestUrl: 'https://www.gstatic.com/generate_204', delayConcurrency: 5, unifiedDelay: true, tcpConcurrent: true,
+      userAgentSuffix: DEFAULT_USER_AGENT_SUFFIX,
       dataAutoUpdate: false, dataIntervalHours: 24, dataModel: 'standard', dataUrls: datasetDefaults(), dataUpdatedAt: {},
     };
     this.activeId = ''; this.previousId = '';
@@ -178,6 +191,45 @@ export class ClashManager extends EventEmitter {
     return this.preparation.snapshot();
   }
 
+  /** e.g. "Mihomo/v1.19.34; ClashForFNOS/v1.0.1" */
+  userAgentPrefixText() {
+    return this.userAgentPrefix || `Mihomo/unknown; ClashForFNOS/v${this.version}`;
+  }
+
+  /** Generated prefix plus the user-defined suffix. */
+  userAgent() {
+    const suffix = this.state.userAgentSuffix || '';
+    const prefix = this.userAgentPrefixText();
+    return suffix ? `${prefix}; ${suffix}` : prefix;
+  }
+
+  /** Rebuild the generated half after the active core or app version changes. */
+  async refreshUserAgentPrefix() {
+    let version = '';
+    try {
+      const entry = this.activeId ? await this.findEntry(this.activeId) : null;
+      version = entry?.version || '';
+    } catch { /* metadata unavailable */ }
+    if (!version) version = this.coreVersion;
+    const normalized = String(version || '').replace(/^v/i, '').trim();
+    this.userAgentPrefix = `Mihomo/${normalized ? `v${normalized}` : 'unknown'}; ClashForFNOS/v${this.version}`;
+    return this.userAgentPrefix;
+  }
+
+  /** Force the composed User-Agent on an outgoing request, keeping other headers. */
+  withUserAgent(options = {}) {
+    const headers = {};
+    const source = options?.headers;
+    if (source && typeof source.forEach === 'function' && typeof source.get === 'function') {
+      source.forEach((value, key) => { headers[key] = value; });
+    } else if (source && typeof source === 'object') {
+      Object.assign(headers, source);
+    }
+    for (const key of Object.keys(headers)) if (key.toLowerCase() === 'user-agent') delete headers[key];
+    headers['user-agent'] = this.userAgent();
+    return { ...options, headers };
+  }
+
   log(level, message, source = 'app') {
     return this.logs?.add({ level, message, source });
   }
@@ -222,6 +274,8 @@ export class ClashManager extends EventEmitter {
     if (typeof this.state.autoSystemProxy !== 'boolean') this.state.autoSystemProxy = false;
     if (!Object.hasOwn(CHANNELS, this.state.channel)) this.state.channel = 'metacubex-stable';
     if (!CORE_LEVELS.has(this.state.logLevel)) this.state.logLevel = 'info';
+    try { this.state.userAgentSuffix = normalizeUserAgentSuffix(this.state.userAgentSuffix ?? DEFAULT_USER_AGENT_SUFFIX); }
+    catch { this.state.userAgentSuffix = DEFAULT_USER_AGENT_SUFFIX; }
 
     this.config = new ConfigService({ root: this.root, socketPath: this.socketPath, secret: this.state.controllerSecret, logLevel: this.state.logLevel, fetcher: (url, options) => this.githubFetcher(url, options), resolver: this.resolver });
     await this.config.init();
@@ -268,6 +322,7 @@ export class ClashManager extends EventEmitter {
     }
     this.log('info', `Clash 管理服务已启动，Core 渠道 ${this.state.channel}`);
     this.startScheduler();
+    await this.refreshUserAgentPrefix();
     if (this.state.autoStart && this.activeId) {
       this.coreState = 'starting';
       this.autoStartTask = this.exclusive(() => this.withPreparation('启动内核', START_STEPS, () => this.startInternal({ fromAuto: true }))).catch(error => {
@@ -1108,7 +1163,7 @@ export class ClashManager extends EventEmitter {
         autoRestart: this.state.autoRestart,
         lastError: this.lastError,
       },
-      settings: { autoStart: this.state.autoStart, autoRestart: this.state.autoRestart, logLevel: this.state.logLevel, channel: this.state.channel, mixedPort: this.state.mixedPort, httpPort: this.state.httpPort, socksPort: this.state.socksPort, allowLan: this.state.allowLan === true, githubMirror: this.state.githubMirror, delayIntervalMinutes: this.state.delayIntervalMinutes, delayTestUrl: this.state.delayTestUrl, delayConcurrency: this.state.delayConcurrency, unifiedDelay: this.state.unifiedDelay, tcpConcurrent: this.state.tcpConcurrent },
+      settings: { autoStart: this.state.autoStart, autoRestart: this.state.autoRestart, logLevel: this.state.logLevel, channel: this.state.channel, mixedPort: this.state.mixedPort, httpPort: this.state.httpPort, socksPort: this.state.socksPort, allowLan: this.state.allowLan === true, githubMirror: this.state.githubMirror, userAgentSuffix: this.state.userAgentSuffix, userAgentPrefix: this.userAgentPrefixText(), userAgent: this.userAgent(), delayIntervalMinutes: this.state.delayIntervalMinutes, delayTestUrl: this.state.delayTestUrl, delayConcurrency: this.state.delayConcurrency, unifiedDelay: this.state.unifiedDelay, tcpConcurrent: this.state.tcpConcurrent },
       config,
       versions: await this.versionSummary(),
       subscriptions: this.config.listSubscriptions(),
@@ -1287,6 +1342,7 @@ export class ClashManager extends EventEmitter {
       this.activeId = id;
       this.previousId = previousActive;
       await this.writeActive();
+      await this.refreshUserAgentPrefix();
       if (wasRunning) await this.startInternal();
       this.log('info', `已启用 Core ${target.label}（${validated.version}）`);
     } catch (error) {
@@ -1528,6 +1584,7 @@ export class ClashManager extends EventEmitter {
       if (!['http:', 'https:'].includes(testUrl.protocol)) fail('测速网址只支持 HTTP/HTTPS');
       next.delayTestUrl = testUrl.href;
     }
+    if (input.userAgentSuffix !== undefined) next.userAgentSuffix = normalizeUserAgentSuffix(input.userAgentSuffix);
     if (input.delayIntervalMinutes !== undefined) {
       const minutes = Number(input.delayIntervalMinutes);
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) fail('定时测速间隔必须是 0–1440 分钟');
@@ -1737,19 +1794,20 @@ export class ClashManager extends EventEmitter {
   async previewSubscription(id) { return this.config.previewSubscription(id); }
 
 
-  async githubFetcher(url, options) {
+  async githubFetcher(url, options = {}) {
     const original = String(url);
     const target = mirrorGithubUrl(original, this.state.githubMirror);
-    if (target === original) return this.fetcher(original, options);
+    const requestOptions = this.withUserAgent(options);
+    if (target === original) return this.fetcher(original, requestOptions);
     try {
-      const response = await this.fetcher(target, options);
+      const response = await this.fetcher(target, requestOptions);
       if (![403, 404, 429].includes(response.status) && response.status < 500) return response;
       await response.body?.cancel();
       this.log('warning', `GitHub 加速地址返回 HTTP ${response.status}，改用直连`);
     } catch (error) {
       this.log('warning', `GitHub 加速地址请求失败：${error.message}，改用直连`);
     }
-    return this.fetcher(original, options);
+    return this.fetcher(original, requestOptions);
   }
 
   mirrorUrl(url) {
@@ -2014,6 +2072,7 @@ export class ClashManager extends EventEmitter {
     if (proxyState.enabled) hints.push('NAS 系统代理只写入 /etc/environment，仅对之后新登录的会话生效；当前 SSH shell、已运行服务不会自动使用它。透明代理请使用增强模式（TUN）。');
     return {
       app: { version: this.version },
+      userAgent: this.userAgent(),
       platform: { os: this.platform, arch: this.arch, supported: this.platformSupported() },
       core: { state: this.coreState, running: this.coreState === 'running', version: this.coreVersion, uptimeMs: this.startedAt ? Math.max(0, Date.now() - this.startedAt) : 0, activeId: this.activeId, path: activeEntry?.path || '', mountOptions },
       dns: { servers: dnsServers },

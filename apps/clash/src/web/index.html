@@ -184,6 +184,13 @@
             <div class="switch-row"><span>统一延迟测速</span><label class="switch"><input id="set-unified-delay" type="checkbox" aria-label="统一延迟测速"><i></i></label></div>
             <div class="switch-row"><span>TCP 并发连接</span><label class="switch"><input id="set-tcp-concurrent" type="checkbox" aria-label="TCP 并发连接"><i></i></label></div>
             <div class="setting-row"><label for="set-github-mirror">GitHub 加速地址</label><input id="set-github-mirror" class="setting-input-wide" type="url" spellcheck="false" placeholder="https://ghfast.top/"></div>
+            <div class="setting-row ua-row">
+              <label for="set-ua-suffix">User-Agent</label>
+              <div class="ua-control">
+                <code id="set-ua-prefix" class="ua-prefix" title="由系统按当前内核版本和应用版本生成">—</code>
+                <input id="set-ua-suffix" class="setting-input-wide ua-input" type="text" maxlength="200" spellcheck="false" placeholder="clash.meta; clash" aria-label="User-Agent 自定义部分">
+              </div>
+            </div>
             <div class="switch-row"><span>允许局域网访问</span><label class="switch"><input id="set-allow-lan" type="checkbox" aria-label="允许局域网访问"><i></i></label></div>
             <div class="switch-row"><span>应用启动时自动启动内核</span><label class="switch"><input id="set-autostart" type="checkbox" aria-label="应用启动时自动启动内核"><i></i></label></div>
             <div class="switch-row"><span>内核意外退出后自动重启</span><label class="switch"><input id="set-autorestart" type="checkbox" aria-label="内核意外退出后自动重启"><i></i></label></div>

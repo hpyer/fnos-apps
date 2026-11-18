@@ -32,6 +32,7 @@ async function setup(t, options = {}) {
   const root = path.join(base, 'var');
   const appRoot = path.join(base, 'app');
   await mkdir(appRoot, { recursive: true });
+  await writeFile(path.join(appRoot, 'version'), 'version = 1.0.1\n');
   const controlFile = path.join(base, 'control.json');
   await writeFile(controlFile, JSON.stringify(options.control || {}));
   process.env.FAKE_CORE_CONTROL = controlFile;
@@ -67,6 +68,7 @@ async function activateManually(manager, id) {
   manager.activeId = id;
   manager.previousId = '';
   await manager.writeActive();
+  await manager.refreshUserAgentPrefix();
 }
 
 async function startedManager(t, port = 23456, options = {}) {
@@ -233,6 +235,43 @@ test('只有节点列表的订阅应用时自动补充分组和规则', async t 
   assert.match(config.source, /MATCH,节点选择/);
   assert.equal((await manager.proxies()).local.count, 1);
   assert.equal((await manager.status()).core.state, 'running');
+});
+
+test('User-Agent 由版本前缀和自定义后缀组成，并应用到请求头', async t => {
+  const { manager } = await setup(t);
+  await addFakeCore(manager, 'installed-one');
+  await activateManually(manager, 'installed-one');
+
+  const status = await manager.status();
+  assert.equal(status.settings.userAgentPrefix, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1');
+  assert.equal(status.settings.userAgentSuffix, 'clash.meta; clash');
+  assert.equal(status.settings.userAgent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1; clash.meta; clash');
+
+  await manager.setSettings({ userAgentSuffix: 'custom/1.0;  extra' });
+  assert.equal((await manager.status()).settings.userAgentSuffix, 'custom/1.0;  extra');
+  assert.equal((await manager.status()).settings.userAgent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1; custom/1.0;  extra');
+
+  await manager.setSettings({ userAgentSuffix: '' });
+  assert.equal((await manager.status()).settings.userAgent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1');
+  await manager.setSettings({ userAgentSuffix: 'clash.meta; clash' });
+
+  await assert.rejects(() => manager.setSettings({ userAgentSuffix: '中文 UA' }), /ASCII/);
+  await assert.rejects(() => manager.setSettings({ userAgentSuffix: 'x'.repeat(201) }), /200/);
+
+  const seen = [];
+  manager.fetcher = async (url, options) => {
+    seen.push({ url: String(url), agent: options.headers['user-agent'], accept: options.headers.accept });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  await manager.githubFetcher('https://github.com/MetaCubeX/mihomo/releases', { headers: { 'user-agent': 'old-agent', accept: 'text/plain' } });
+  assert.equal(seen[0].agent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1; clash.meta; clash');
+  assert.equal(seen[0].accept, 'text/plain');
+
+  // Core 下载/版本检查与订阅下载分别经过 repository 和 ConfigService 的 fetcher。
+  await manager.repository.fetcher('https://github.com/MetaCubeX/mihomo/releases/download/v1/x.gz', { headers: { 'user-agent': 'repo-agent' } });
+  assert.equal(seen.at(-1).agent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1; clash.meta; clash');
+  await manager.config.fetcher('https://github.com/MetaCubeX/mihomo/releases.atom', { headers: { 'user-agent': 'sub-agent' } });
+  assert.equal(seen.at(-1).agent, 'Mihomo/v1.19.33; ClashForFNOS/v1.0.1; clash.meta; clash');
 });
 
 test('版本启用、回滚和删除保护', async t => {
