@@ -11,6 +11,199 @@ fi
 # Keep the prompt compact while making the host and working directory easy to scan.
 PS1='\[\033[1;32m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
 
+# Command history -----------------------------------------------------------
+# Sessions are killed with SIGKILL when the browser disconnects, so Bash never
+# gets a chance to write its history on exit.  Persist after every command
+# instead, and keep one entry per distinct command for the Up arrow.
+if [ -n "${HOME:-}" ] && [ -d "$HOME" ]; then
+  XTERM_HISTFILE="$HOME/.xterm_history"
+  HISTFILE="$XTERM_HISTFILE"
+  HISTSIZE=10000
+  HISTFILESIZE=10000
+  HISTCONTROL=ignoredups:erasedups
+  HISTTIMEFORMAT=
+  shopt -s histappend 2>/dev/null || true
+
+  __xterm_flock=$(command -v flock 2>/dev/null || true)
+
+  __xterm_history_compact() {
+    [ -f "$XTERM_HISTFILE" ] || return 0
+    local tmp="${XTERM_HISTFILE}.tmp.$$"
+    local script='
+      { lines[NR] = $0 }
+      END {
+        for (i = NR; i >= 1; i--) {
+          if (lines[i] == "" || lines[i] in seen) continue
+          seen[lines[i]] = 1
+          unique[++count] = lines[i]
+        }
+        start = count > 10000 ? count - 10000 + 1 : 1
+        for (i = count; i >= start; i--) print unique[i]
+      }
+    '
+    if [ -n "$__xterm_flock" ]; then
+      (
+        umask 077
+        exec 9>>"${XTERM_HISTFILE}.lock" || exit 1
+        "$__xterm_flock" -x 9 || exit 1
+        awk "$script" "$XTERM_HISTFILE" >"$tmp" &&
+          mv -f "$tmp" "$XTERM_HISTFILE"
+        chmod 600 "$XTERM_HISTFILE" 2>/dev/null || true
+        "$__xterm_flock" -u 9
+      ) 2>/dev/null
+    else
+      (umask 077; awk "$script" "$XTERM_HISTFILE" >"$tmp") 2>/dev/null &&
+        mv -f "$tmp" "$XTERM_HISTFILE" 2>/dev/null
+      chmod 600 "$XTERM_HISTFILE" 2>/dev/null || true
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+  }
+
+  if [ ! -e "$XTERM_HISTFILE" ]; then
+    (umask 077; : >"$XTERM_HISTFILE") 2>/dev/null || true
+  fi
+  # Bash loads HISTFILE after this file.  Compact it first so duplicates from
+  # older sessions do not need several Up-arrow presses.
+  __xterm_history_compact
+  __xterm_history_last=$(tail -n 1 "$XTERM_HISTFILE" 2>/dev/null || true)
+
+  __xterm_history_append() {
+    local entry
+    entry=$(HISTTIMEFORMAT= builtin history 1 2>/dev/null) || return 0
+    entry=${entry#"${entry%%[![:space:]]*}"}
+    entry=${entry#* }
+    entry=${entry# }
+    # In a real terminal the first prompt reports the last loaded entry,
+    # which is already in the file.  (Piped/non-TTY input may not prompt
+    # before the first command, so only prime this way for a TTY.)
+    if [ -z "${__xterm_history_primed:-}" ]; then
+      __xterm_history_primed=1
+      if [ -t 0 ]; then
+        __xterm_history_last=$entry
+        return 0
+      fi
+    fi
+    [ -n "$entry" ] || return 0
+    # Only append a command that is new since the previous prompt.
+    [ "$entry" = "${__xterm_history_last:-}" ] && return 0
+    __xterm_history_last=$entry
+    if [ -n "$__xterm_flock" ]; then
+      (
+        umask 077
+        exec 9>>"${XTERM_HISTFILE}.lock" || exit 1
+        "$__xterm_flock" -x 9 || exit 1
+        printf '%s\n' "$entry" >>"$XTERM_HISTFILE"
+        "$__xterm_flock" -u 9
+      ) 2>/dev/null
+    else
+      (umask 077; printf '%s\n' "$entry" >>"$XTERM_HISTFILE") 2>/dev/null
+    fi
+  }
+
+  # Do not let Bash save its whole in-memory list at exit: each command was
+  # already appended above, and a full save would clobber concurrent sessions.
+  trap 'HISTFILE=/dev/null' EXIT
+fi
+
+# System proxy --------------------------------------------------------------
+# fnOS keeps the system-wide proxy environment in /etc/environment (the same
+# place the Clash app's system-proxy switch writes).  Re-read it before each
+# prompt so a running Su session follows later changes without reconnecting.
+__xterm_proxy_snapshot() {
+  local file=${XTERM_PROXY_FILE:-/etc/environment}
+  [ -r "$file" ] || file=/etc/environment
+  [ -r "$file" ] || return 0
+  local line key value snapshot=
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    line=${line#"${line%%[![:space:]]*}"}
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in 'export '*) line=${line#export } ;; esac
+    key=${line%%=*}
+    [ "$key" = "$line" ] && continue
+    value=${line#*=}
+    key=${key#"${key%%[![:space:]]*}"}
+    key=${key%"${key##*[![:space:]]}"}
+    value=${value#"${value%%[![:space:]]*}"}
+    value=${value%"${value##*[![:space:]]}"}
+    case "$key" in
+      http_proxy|https_proxy|all_proxy|no_proxy|ftp_proxy|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|FTP_PROXY) ;;
+      *) continue ;;
+    esac
+    case "$value" in
+      \"*\") value=${value#\"}; value=${value%\"} ;;
+      \'*\') value=${value#\'}; value=${value%\'} ;;
+    esac
+    [ -n "$value" ] || continue
+    snapshot="${snapshot}${key}=${value}
+"
+  done <"$file"
+  printf '%s' "$snapshot"
+}
+
+__xterm_proxy_apply() {
+  local file=${XTERM_PROXY_FILE:-/etc/environment}
+  [ -r "$file" ] || file=/etc/environment
+  [ -r "$file" ] || return 0
+  local snapshot key value
+  snapshot=$(__xterm_proxy_snapshot) || return 0
+  [ "$snapshot" = "${__xterm_proxy_sig-__xterm_proxy_unset__}" ] && return 0
+  __xterm_proxy_sig=$snapshot
+  unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY \
+    all_proxy ALL_PROXY no_proxy NO_PROXY ftp_proxy FTP_PROXY
+  [ -n "$snapshot" ] || return 0
+  while IFS='=' read -r key value; do
+    case "$key" in
+      http_proxy|https_proxy|all_proxy|no_proxy|ftp_proxy|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|FTP_PROXY)
+        export "$key=$value"
+        ;;
+    esac
+  done <<<"$snapshot"
+  # Many tools only read one casing.  Mirror a value when the other casing is
+  # absent, but keep explicit differing values from /etc/environment intact.
+  [ -n "${http_proxy+x}" ] && [ -z "${HTTP_PROXY+x}" ] && export HTTP_PROXY="$http_proxy"
+  [ -n "${HTTP_PROXY+x}" ] && [ -z "${http_proxy+x}" ] && export http_proxy="$HTTP_PROXY"
+  [ -n "${https_proxy+x}" ] && [ -z "${HTTPS_PROXY+x}" ] && export HTTPS_PROXY="$https_proxy"
+  [ -n "${HTTPS_PROXY+x}" ] && [ -z "${https_proxy+x}" ] && export https_proxy="$HTTPS_PROXY"
+  [ -n "${all_proxy+x}" ] && [ -z "${ALL_PROXY+x}" ] && export ALL_PROXY="$all_proxy"
+  [ -n "${ALL_PROXY+x}" ] && [ -z "${all_proxy+x}" ] && export all_proxy="$ALL_PROXY"
+  [ -n "${no_proxy+x}" ] && [ -z "${NO_PROXY+x}" ] && export NO_PROXY="$no_proxy"
+  [ -n "${NO_PROXY+x}" ] && [ -z "${no_proxy+x}" ] && export no_proxy="$NO_PROXY"
+  [ -n "${ftp_proxy+x}" ] && [ -z "${FTP_PROXY+x}" ] && export FTP_PROXY="$ftp_proxy"
+  [ -n "${FTP_PROXY+x}" ] && [ -z "${ftp_proxy+x}" ] && export ftp_proxy="$FTP_PROXY"
+  return 0
+}
+
+__xterm_proxy_tick() {
+  [ "${SECONDS:-0}" = "${__xterm_proxy_checked:-}" ] && return 0
+  __xterm_proxy_checked=${SECONDS:-0}
+  __xterm_proxy_apply
+  return 0
+}
+
+__xterm_proxy_sig=__xterm_proxy_unset__
+__xterm_proxy_apply
+__xterm_proxy_checked=${SECONDS:-0}
+
+# Check for proxy changes before every command (the DEBUG trap) and at every
+# prompt.  The tick is throttled to one file read per second so tight loops do
+# not pay the parsing cost for every iteration.
+trap '__xterm_proxy_tick' DEBUG
+
+# Persist history before every prompt; also refresh proxy changes made while
+# the shell was sitting idle at the prompt.
+__xterm_prompt() {
+  __xterm_proxy_apply
+  __xterm_proxy_checked=${SECONDS:-0}
+  [ -n "${XTERM_HISTFILE:-}" ] && __xterm_history_append
+  return 0
+}
+if [ -n "${PROMPT_COMMAND:-}" ]; then
+  PROMPT_COMMAND="__xterm_prompt; $PROMPT_COMMAND"
+else
+  PROMPT_COMMAND=__xterm_prompt
+fi
+
 # Start the target user's shell with the same defaults when `su` changes users.
 if [ -x "${XTERM_SU_SHELL:-}" ]; then
   su() {
