@@ -1,6 +1,6 @@
 # Dnsmasq for fnOS
 
-这是一个 DNS-only 应用：只监听配置中的 DNS 地址和 53 端口，使用显式上游 DNS、缓存和自定义解析记录，不配置 DHCP、路由、NAT，也不改写系统 `resolv.conf`。
+这是一个 DNS-only 应用：固定监听配置中的 DNS 地址和 53 端口，使用显式上游 DNS、缓存和自定义解析记录，不配置 DHCP、路由、NAT，也不改写系统 `resolv.conf`。安装时不询问端口，53 端口不可修改。
 
 当前版本为开发中的 `0.1.0`。构建前需要在目标 Linux x86_64/arm64 构建机生成 dnsmasq 2.93 二进制：
 

@@ -1,4 +1,0 @@
-[{
-  "stepTitle": "Dnsmasq for fnOS",
-  "items": [{ "type": "text", "field": "app_port", "label": "访问端口", "initValue": "53" }]
-}]
