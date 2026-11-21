@@ -34,6 +34,10 @@ await mkdir(path.join(versionCheckPackage, 'src'), { recursive: true });
 await cp(path.join(source, '../../packages/version-check/package.json'), path.join(versionCheckPackage, 'package.json'));
 await cp(path.join(source, '../../packages/version-check/src/check.mjs'), path.join(versionCheckPackage, 'src/check.mjs'));
 await cp(path.join(source, '../../packages/version-check/src/core.mjs'), path.join(versionCheckPackage, 'src/core.mjs'));
+const privilegePackage = path.join(target, 'app/node_modules/@fnos/privilege');
+await mkdir(path.join(privilegePackage, 'src'), { recursive: true });
+await cp(path.join(source, '../../packages/privilege/package.json'), path.join(privilegePackage, 'package.json'));
+await cp(path.join(source, '../../packages/privilege/src'), path.join(privilegePackage, 'src'), { recursive: true });
 
 await build({
   entryPoints: [path.join(source, 'src/web/index.js'), path.join(source, 'src/web/index.css')],

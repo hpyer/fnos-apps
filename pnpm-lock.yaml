@@ -17,21 +17,15 @@ importers:
 
   apps/clash:
     dependencies:
+      '@fnos/privilege':
+        specifier: workspace:*
+        version: link:../../packages/privilege
       '@fnos/toast':
         specifier: workspace:*
         version: link:../../packages/toast
       '@fnos/version-check':
         specifier: workspace:*
         version: link:../../packages/version-check
-      '@noble/ciphers':
-        specifier: ^1.3.0
-        version: 1.3.0
-      '@noble/curves':
-        specifier: ^1.9.0
-        version: 1.9.0
-      '@noble/hashes':
-        specifier: ^1.8.0
-        version: 1.8.0
 
   apps/dsh:
     dependencies:
@@ -89,6 +83,18 @@ importers:
       ws:
         specifier: 8.21.3
         version: 8.21.3
+
+  packages/privilege:
+    dependencies:
+      '@noble/ciphers':
+        specifier: ^1.3.0
+        version: 1.3.0
+      '@noble/curves':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
 
   packages/toast: {}
 

@@ -6,7 +6,10 @@ Clash 的具体实现可参考：
 
 - 包用户与 Core：`apps/clash/native/config/privilege`、`apps/clash/src/manager.mjs`
 - root helper：`apps/clash/native/app/bin/setup-privileges`、`core-caps`、`system-proxy`
+- 公共提权传输：`packages/privilege/src/broker.mjs`、`credential.mjs`、`client.mjs`
 - 架构与生命周期：[apps/clash/docs/architecture.md](../apps/clash/docs/architecture.md)
+
+公共组件只负责提权通道、凭据保护、helper 权限检查和 capability 调用。每个应用仍必须提供独立的 root-owned helper、sudoers 文件、参数校验和应用专属路径策略；不得把公共组件当作任意 root 命令执行器。
 
 ## 1. 提权模型：应用保持非 root
 

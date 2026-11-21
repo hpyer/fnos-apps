@@ -1,7 +1,7 @@
 import http from 'node:http';
-import crypto from 'node:crypto';
 import { chmod, readFile, rm } from 'node:fs/promises';
 import { GitHubReleaseSource, UpdateChecker, readAppVersion } from '@fnos/version-check';
+import { CredentialError, createCredentialKey, decryptCredential } from '@fnos/privilege/credential';
 import { defaultConfig } from './config-template.mjs';
 import { AppError, fail } from './errors.mjs';
 
@@ -57,35 +57,6 @@ async function gatewayUser(request) {
   return String(request.headers['x-trim-username'] || '').slice(0, 64);
 }
 
-// Ephemeral ECDH handshake so the admin password is never sent in plaintext.
-// The private key lives only in manager process memory for the session.
-function decryptCredential(body, keyJson) {
-  const encrypted = body?.encryptedCredential;
-  if (!encrypted || typeof encrypted !== 'object') return { ...body, password: '' };
-  if (!keyJson) fail('凭据通道未就绪，请刷新页面后重试', 409);
-  const { ephemeralPublicKey, iv, tag, data } = encrypted;
-  if (typeof ephemeralPublicKey !== 'string' || typeof iv !== 'string' || typeof tag !== 'string' || typeof data !== 'string') fail('凭据格式无效');
-  try {
-    let rawPoint = Buffer.from(ephemeralPublicKey, 'base64');
-    // Accept both compressed (33-byte) and uncompressed (65-byte) P-256 points.
-    if (rawPoint.length === 33 && (rawPoint[0] === 0x02 || rawPoint[0] === 0x03)) {
-      rawPoint = crypto.ECDH.convertKey(rawPoint, 'prime256v1', undefined, undefined, 'uncompressed');
-    }
-    if (rawPoint.length !== 65 || rawPoint[0] !== 0x04) fail('凭据公钥格式无效');
-    const server = crypto.createECDH('prime256v1');
-    server.setPrivateKey(Buffer.from(JSON.parse(keyJson).d, 'base64url'));
-    const shared = server.computeSecret(rawPoint);
-    const aesKey = crypto.hkdfSync('sha256', shared, Buffer.alloc(32), Buffer.alloc(0), 32);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(aesKey), Buffer.from(iv, 'base64'));
-    decipher.setAuthTag(Buffer.from(tag, 'base64'));
-    const plain = Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
-    return { ...body, password: plain.slice(0, 512) };
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    fail('凭据解密失败，请刷新页面后重试', 400);
-  }
-}
-
 function sse(response, extra = {}) {
   response.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
@@ -129,16 +100,9 @@ export async function serve(manager, { assets, socket, devPort, getCredentialKey
       if (request.method === 'GET') {
         switch (url.pathname) {
           case `${PREFIX}/api/credential-key`: {
-            const ecdh = crypto.createECDH('prime256v1');
-            ecdh.generateKeys();
-            const pub = ecdh.getPublicKey();
-            setCredentialKey(JSON.stringify({
-              kty: 'EC', crv: 'P-256',
-              x: pub.subarray(1, 33).toString('base64url'),
-              y: pub.subarray(33).toString('base64url'),
-              d: ecdh.getPrivateKey().toString('base64url'),
-            }));
-            return json(response, 200, { publicKey: JSON.stringify({ kty: 'EC', crv: 'P-256', x: pub.subarray(1, 33).toString('base64url'), y: pub.subarray(33).toString('base64url') }) });
+            const key = createCredentialKey();
+            setCredentialKey(key.privateKey);
+            return json(response, 200, { publicKey: key.publicKey });
           }
           case `${PREFIX}/api/status`: return json(response, 200, await manager.status());
           case `${PREFIX}/api/preparation`: return json(response, 200, { preparation: manager.preparationSnapshot() });
@@ -217,10 +181,11 @@ export async function serve(manager, { assets, socket, devPort, getCredentialKey
         default: return json(response, 404, { error: '未找到接口' });
       }
     } catch (error) {
-      const status = error instanceof AppError ? error.status : 500;
-      if (!(error instanceof AppError) && manager.log) manager.log('error', `接口异常：${error.message}`);
+      const knownError = error instanceof AppError || error instanceof CredentialError;
+      const status = knownError ? error.status : 500;
+      if (!knownError && manager.log) manager.log('error', `接口异常：${error.message}`);
       if (response.headersSent) return response.end();
-      return json(response, status, { error: error instanceof AppError ? error.message : '服务内部错误，请查看应用日志' });
+      return json(response, status, { error: knownError ? error.message : '服务内部错误，请查看应用日志' });
     }
   });
   server.headersTimeout = 15000;

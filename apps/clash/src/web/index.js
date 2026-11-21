@@ -1,5 +1,6 @@
 import { toast } from '@fnos/toast';
 import { watchAppUpdates } from '@fnos/version-check/client';
+import { encryptCredential } from '@fnos/privilege/client';
 import {
   configKindLabel, connectionTarget, delayLevel, delayText, formatBytes, formatClock,
   formatDuration, formatTime, levelLabel, modeLabel, truncate,
@@ -83,50 +84,15 @@ async function ensureCredentialKey() {
  * Uses @noble/curves instead of WebCrypto: fnOS serves the page over plain HTTP on a
  * LAN address, where crypto.subtle is unavailable (secure-context restriction).
  */
-async function encryptCredential(password) {
-  const { p256 } = await import('@noble/curves/nist.js');
-  const { hkdf } = await import('@noble/hashes/hkdf.js');
-  const { sha256 } = await import('@noble/hashes/sha2.js');
-  const { gcm } = await import('@noble/ciphers/aes.js');
-  const { randomBytes } = await import('@noble/hashes/utils.js');
+async function encryptAdminCredential(password) {
   const key = await ensureCredentialKey();
-  const serverJwk = JSON.parse(key.publicKey);
-  const serverX = base64ToBytes(serverJwk.x);
-  const serverY = base64ToBytes(serverJwk.y);
-  const serverPoint = new Uint8Array(65);
-  serverPoint[0] = 0x04;
-  serverPoint.set(serverX, 1);
-  serverPoint.set(serverY, 33);
-  const priv = p256.utils.randomPrivateKey();
-  const pub = p256.getPublicKey(priv, false);
-  const shared = p256.getSharedSecret(priv, serverPoint).slice(1);
-  const aesKey = hkdf(sha256, shared, new Uint8Array(32), new Uint8Array(0), 32);
-  const iv = randomBytes(12);
-  const sealed = gcm(aesKey, iv).encrypt(new TextEncoder().encode(password));
-  return {
-    ephemeralPublicKey: bytesToBase64(pub),
-    iv: bytesToBase64(iv),
-    tag: bytesToBase64(sealed.slice(-16)),
-    data: bytesToBase64(sealed.slice(0, -16)),
-  };
-}
-
-function base64ToBytes(value) {
-  // Accept both base64 and base64url (fnOS JWK keys use base64url without padding).
-  const normalized = String(value).replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(String(value).length / 4) * 4, '=');
-  return Uint8Array.from(atob(normalized), ch => ch.charCodeAt(0));
-}
-
-function bytesToBase64(bytes) {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+  return encryptCredential(password, key.publicKey);
 }
 
 async function request(path, { method = 'GET', body, query = '' } = {}) {
   let payload = body;
   if (payload && typeof payload.password === 'string' && payload.password) {
-    const encryptedCredential = await encryptCredential(payload.password);
+    const encryptedCredential = await encryptAdminCredential(payload.password);
     payload = { ...payload, password: undefined, encryptedCredential };
   } else if (payload && typeof payload.password === 'string') {
     payload = { ...payload, password: undefined };

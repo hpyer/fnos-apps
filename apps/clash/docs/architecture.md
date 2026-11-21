@@ -57,6 +57,8 @@ mihomo 子进程（当前激活槽位）
 
 ## 安全边界
 
+提权基础设施复用 workspace 公共包 `@fnos/privilege`。该包提供管理员凭据的 ECDH + AES-GCM 通道、root helper 权限检查、sudo 执行和 capability 调用；Clash 仍独立维护 `system-proxy`、`core-caps` helper 及其参数和路径校验。构建时公共包会复制进 FPK，安装后不依赖 workspace。
+
 - 统一网关注入管理员身份；开发模式只监听回环地址并校验 Host。写操作额外要求 JSON、`X-Fnos-Request: 1` 和同源请求，请求体上限 3 MiB，部分响应限制大小。`GET /api/diagnostics` 只读汇总 Core 状态、allow-lan/bind-address、端口、本机网卡地址和本机到代理端口的 TCP 可达性，用于区分监听、防火墙与虚拟机网络问题。
 - Controller 仅使用 Unix Socket，不监听 TCP；即使配置中原本包含 `external-controller: 0.0.0.0:9090` 也会在运行时配置中移除。
 - 不实现任意外部命令或路由修改。增强模式改写配置中的 `tun.enable`，通过既有配置校验/重启流程生效，并在重启后检查 TUN 网卡、`/dev/net/tun` 和内核 `CAP_NET_ADMIN`；未检测到网卡则恢复原配置/原 Core 并报错。`curl -x <mixed-port>` 只能验证代理端口，不能验证 TUN。

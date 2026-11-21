@@ -20,6 +20,7 @@ import { PreparationProgress } from './progress.mjs';
 import { mirrorGithubUrl, normalizeMirror, unmirrorGithubUrl } from './mirror.mjs';
 import { configInfo, directProxies, ensureTunDns, injectController, proxyProviders, setTunEnabled, topLevelValue } from './yaml.mjs';
 import { atomicJSON, atomicWrite, ensureDir, hashFile, pathExists, randomSecret, readJSON, removePath, safeId } from './storage.mjs';
+import { PrivilegeBroker, PrivilegeError } from '@fnos/privilege';
 
 const VERSION_OUTPUT_MAX = 32768;
 const PRIVILEGED_HELPER_DIR = '/usr/local/lib/clash-for-fnos';
@@ -120,6 +121,12 @@ export class ClashManager extends EventEmitter {
     this.extract = extract;
     this.systemEnvironmentFile = systemEnvironmentFile;
     this.privilegedHelperDir = privilegedHelperDir;
+    this.privilege = new PrivilegeBroker({
+      helperDir: privilegedHelperDir,
+      run,
+      redact: (value, secrets) => redact(value, [this.state?.controllerSecret, ...secrets]),
+      getSecrets: () => [this.state?.controllerSecret],
+    });
     this.bootstrapData = bootstrapData !== false;
     this.preparation = new PreparationProgress({ now });
     this.capabilityError = '';
@@ -802,94 +809,21 @@ export class ClashManager extends EventEmitter {
 
   /** Run a command as root after authenticating the logged-in fnOS administrator. */
   async runAsLoginUser(helper, args, { password, user }) {
-    if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,31}$/.test(user || '')) fail('无法识别当前登录的 fnOS 用户，请重新登录后重试', 401);
-    if (!password || password.length > 512) fail('管理员密码无效', 401);
-    const quote = value => `'${String(value).replace(/'/g, `'\\''`)}'`;
-    const inner = ['sudo', '-S', '-p', 'SUDOPASS:', '-u', 'root', '--', helper, ...args].map(quote).join(' ');
-    const suCommand = `su - ${quote(user)} -c ${quote(inner)}`;
-    return new Promise((resolve, reject) => {
-      let output = '';
-      let settled = false;
-      let sentSuPassword = false;
-      let sentSudoPassword = false;
-      const child = spawn('script', ['-q', '-e', '-f', '-c', suCommand, '/dev/null'], {
-        env: { ...process.env, TERM: 'dumb' },
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const finish = (error, value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        try { child.stdin.end(); } catch { /* already closed */ }
-        if (error) reject(error); else resolve(value);
-      };
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        finish(new AppError('管理员授权超时，请重试', 403));
-      }, 30000);
-      const onData = chunk => {
-        const text = chunk.toString();
-        output = (output + text).slice(-8000);
-        if (!sentSuPassword && /Password[:：]|密码[:：]/.test(text) && !/SUDOPASS:/.test(text)) {
-          sentSuPassword = true;
-          child.stdin.write(`${password}\n`);
-        }
-        if (!sentSudoPassword && sentSuPassword && /SUDOPASS:|password for|\[sudo\]|密码[:：]/.test(text)) {
-          sentSudoPassword = true;
-          child.stdin.write(`${password}\n`);
-        }
-      };
-      child.stdout.on('data', onData);
-      child.stderr.on('data', onData);
-      child.once('error', error => {
-        if (error.code === 'ENOENT') finish(new AppError('系统缺少 script 命令，无法进行管理员授权', 500));
-        else finish(new AppError(`管理员授权启动失败：${error.message}`, 500));
-      });
-      child.once('close', code => {
-        if (code === 0) { finish(null, output.trim()); return; }
-        const clean = redact(output.replaceAll(password, '***'), [this.state.controllerSecret]).trim();
-        if (/Authentication failure|incorrect password|Sorry, try again|密码不正确/i.test(clean)) {
-          finish(new AppError('管理员密码不正确，提权失败', 401));
-        } else if (/not in the sudoers|不在 sudoers|sudoers file/i.test(clean)) {
-          finish(new AppError('当前登录用户没有 sudo 权限，请检查 fnOS 管理员账号配置', 403));
-        } else if (/a terminal is required|no tty|requiretty/i.test(clean)) {
-          finish(new AppError('sudo 需要终端确认，无法在后台完成授权', 403));
-        } else {
-          finish(new AppError(clean.slice(0, 300) || `管理员授权失败（退出状态 ${code}）`, 403));
-        }
-      });
-    });
+    try { return await this.privilege.runAsLoginUser(helper, args, { password, user }); }
+    catch (error) { if (error instanceof PrivilegeError) fail(error.message, error.status); throw error; }
   }
 
   /** Run a root-owned helper. With a password, authenticate as the logged-in admin; otherwise use NOPASSWD sudoers. */
   async privilegedRun(helper, args, { password = '', user = '', allowPackageOwned = false } = {}) {
-    let info = null;
-    try { info = await stat(helper); } catch { info = null; }
-    if (info && (info.mode & 0o022) !== 0) {
-      // Package-owned bootstrap scripts may be installed group-writable; tighten before use.
-      try { await chmod(helper, 0o755); info = await stat(helper); } catch { /* root-owned: cannot chmod */ }
-    }
-    const writableMask = allowPackageOwned ? 0o002 : 0o022;
-    if (info && (info.mode & writableMask) !== 0) fail('系统 helper 不可被其他用户写入，已拒绝提权', 500);
-    if (!allowPackageOwned && info && info.uid !== 0) fail('系统 helper 必须由 root 拥有，已拒绝提权', 500);
-    if (process.getuid && process.getuid() === 0) return this.run(helper, args, { timeout: 15000 });
-    if (password) {
-      // After the one-time setup, the narrow sudoers rule is NOPASSWD; avoid a second su prompt.
-      try { return await this.run('sudo', ['-n', helper, ...args], { timeout: 10000 }); }
-      catch { return this.runAsLoginUser(helper, args, { password, user }); }
-    }
+    const overriddenLoginRunner = this.runAsLoginUser !== ClashManager.prototype.runAsLoginUser
+      ? (...values) => this.runAsLoginUser(...values)
+      : undefined;
     try {
-      return await this.run(helper, args, { timeout: 15000 });
-    } catch (directError) {
-      try {
-        return await this.run('sudo', ['-n', helper, ...args], { timeout: 15000 });
-      } catch (error) {
-        const message = String(error.message || '');
-        if (/incorrect password|密码/i.test(message)) fail('管理员密码不正确，提权失败', 401);
-        if (/not in the sudoers|sudoers/i.test(message)) fail('当前系统不允许该用户通过 sudo 提权，请检查 fnOS 管理员账号配置', 403);
-        fail(`无法执行系统 helper：${redact(message || directError.message, [this.state.controllerSecret])}`, 403);
-      }
+      return await this.privilege.privilegedRun(helper, args, {
+        password, user, allowPackageOwned, runAsLoginUser: overriddenLoginRunner,
+      });
     }
+    catch (error) { if (error instanceof PrivilegeError) fail(error.message, error.status); throw error; }
   }
 
   async applyCoreCapabilities(corePath = '', { password = '', user = '' } = {}) {
