@@ -1,0 +1,14 @@
+appname = dnsmasq
+version = 0.1.0
+display_name = Dnsmasq for fnOS
+desc = Dnsmasq for fnOS
+platform = x86
+source = thirdparty
+maintainer = hpyer
+distributor = hpyer
+desktop_uidir = ui
+desktop_applaunchname = dnsmasq.Application
+checkport = false
+micro_app = true
+install_dep_apps = nodejs_v24
+os_min_version = 1.1.3100

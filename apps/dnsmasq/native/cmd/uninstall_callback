@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+action="${wizard_delete_data:-keep}"
+case "$action" in
+  delete|true|1) ;;
+  *) echo '保留 Dnsmasq 应用数据'; exit 0 ;;
+esac
+data="${TRIM_PKGVAR:-}"
+[ -n "$data" ] || exit 0
+canonical=$(readlink -f "$data" 2>/dev/null || true)
+case "$canonical" in
+  /vol*/@appdata/dnsmasq|/vol*/@appdata/dnsmasq/var|/vol*/@appcenter/dnsmasq/var|/var/apps/dnsmasq/var) rm -rf -- "$canonical" ;;
+  *) echo "拒绝清理非应用数据路径：$canonical" >&2 ;;
+esac
+exit 0

@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+[ -f "${TRIM_APPDEST}/app/main.mjs" ] || { echo '升级包缺少应用入口' >&2; exit 1; }
+exit 0

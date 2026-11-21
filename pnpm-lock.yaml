@@ -27,6 +27,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/version-check
 
+  apps/dnsmasq:
+    dependencies:
+      '@fnos/privilege':
+        specifier: workspace:*
+        version: link:../../packages/privilege
+
   apps/dsh:
     dependencies:
       '@fnos/toast':

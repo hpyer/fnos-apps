@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" -eq 0 ] || { echo 'setup-privileges requires root' >&2; exit 1; }
+APP_DEST="${1:-/var/apps/dnsmasq/target}"
+case "$APP_DEST" in /var/apps/dnsmasq/target|/vol*/@appdata/dnsmasq/target|/vol*/@appcenter/dnsmasq/target) ;; *) echo 'unexpected application directory' >&2; exit 2 ;; esac
+INSTALL_DIR=/usr/local/lib/dnsmasq; USER_NAME=dnsmasq; SELF=$(readlink -f "$0" 2>/dev/null || echo "$0"); SRC=$(dirname "$SELF")
+[ -f "$SRC/dnsmasq-caps" ] || { echo 'missing helper: dnsmasq-caps' >&2; exit 1; }
+install -d -m 0755 -o root -g root "$INSTALL_DIR"; install -m 0755 -o root -g root "$SRC/dnsmasq-caps" "$INSTALL_DIR/dnsmasq-caps"; install -m 0755 -o root -g root "$SRC/setup-privileges" "$INSTALL_DIR/setup-privileges"
+TMP=$(mktemp); trap 'rm -f "$TMP"' EXIT HUP INT TERM
+cat >"$TMP" <<EOF
+Defaults:$USER_NAME !requiretty
+$USER_NAME ALL=(root) NOPASSWD: $INSTALL_DIR/dnsmasq-caps apply *
+EOF
+command -v visudo >/dev/null 2>&1 && visudo -cf "$TMP" >/dev/null
+install -m 0440 "$TMP" /etc/sudoers.d/dnsmasq

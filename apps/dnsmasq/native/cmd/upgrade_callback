@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$(id -u)" -eq 0 ] && [ -x "${TRIM_APPDEST}/app/bin/setup-privileges" ]; then
+  "${TRIM_APPDEST}/app/bin/setup-privileges" "${TRIM_APPDEST}" || echo 'warning: failed to refresh dnsmasq helper' >&2
+fi
+exit 0

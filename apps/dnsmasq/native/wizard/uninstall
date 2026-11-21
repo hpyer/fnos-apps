@@ -1,0 +1,9 @@
+[
+  {
+    "stepTitle": "数据清理",
+    "items": [
+      {"type":"radio","field":"wizard_delete_data","label":"应用数据","initValue":"keep","options":[{"label":"保留配置和日志","value":"keep"},{"label":"删除全部应用数据（不可恢复）","value":"delete"}]},
+      {"type":"tips","helpText":"默认保留 /vol*/@appdata/dnsmasq 下的配置、解析记录、运行日志和缓存；删除选项不可恢复。"}
+    ]
+  }
+]

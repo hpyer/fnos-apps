@@ -1,0 +1,6 @@
+{
+  "version": "2.93",
+  "source": "https://thekelleys.org.uk/dnsmasq/dnsmasq-2.93.tar.xz",
+  "license": "GPL-2.0-or-later",
+  "sha256": "to-be-recorded-by-linux-build-pipeline"
+}
