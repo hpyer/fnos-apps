@@ -1,1 +1,1 @@
-{"defaults":{"run-as":"package"}}
+{"defaults":{"run-as":"package"},"username":"dnsmasq_for_fnos","groupname":"dnsmasq_for_fnos"}
