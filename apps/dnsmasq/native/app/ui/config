@@ -1,1 +1,1 @@
-{".url":{"dnsmasq.Application":{"title":"Dnsmasq for fnOS","icon":"images/dnsmasq_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/dnsmasq","gatewaySocket":"app.sock","url":"/app/dnsmasq/","allUsers":false,"control":{"accessPerm":"readonly"}}}}
+{".url":{"dnsmasq-for-fnos.Application":{"title":"Dnsmasq for fnOS","icon":"images/dnsmasq_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/dnsmasq-for-fnos","gatewaySocket":"app.sock","url":"/app/dnsmasq-for-fnos/","allUsers":false,"control":{"accessPerm":"readonly"}}}}

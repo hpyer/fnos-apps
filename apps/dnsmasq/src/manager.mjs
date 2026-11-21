@@ -23,7 +23,7 @@ export function command(binary, args, { timeout = 15000, cwd } = {}) {
 function localAddresses() { return new Set(Object.values(networkInterfaces()).flatMap(items => (items || []).map(item => item.address))); }
 
 export class DnsmasqManager extends EventEmitter {
-  constructor(root, { appRoot = '', binary, run = command, platform = process.platform, arch = process.arch, privilegedHelperDir = '/usr/local/lib/dnsmasq' } = {}) {
+  constructor(root, { appRoot = '', binary, run = command, platform = process.platform, arch = process.arch, privilegedHelperDir = '/usr/local/lib/dnsmasq-for-fnos' } = {}) {
     super(); this.root = root; this.appRoot = appRoot; this.binary = binary; this.run = run; this.platform = platform; this.arch = arch; this.privilegedHelperDir = privilegedHelperDir;
     this.privilege = new PrivilegeBroker({ helperDir: privilegedHelperDir, run });
     this.stateFile = path.join(root, 'state.json'); this.recordsFile = path.join(root, 'records.json'); this.runtimeDir = path.join(root, 'runtime'); this.configFile = path.join(this.runtimeDir, 'dnsmasq.conf'); this.logFile = path.join(root, 'logs/dnsmasq.log');

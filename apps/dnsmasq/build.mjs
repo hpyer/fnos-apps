@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = fileURLToPath(new URL('./', import.meta.url));
-const target = path.join(root, 'dist', 'dnsmasq');
+const target = path.join(root, 'dist', 'dnsmasq-for-fnos');
 const version = /^version\s*=\s*(\d+\.\d+\.\d+)\s*$/m.exec(await readFile(path.join(source, 'native/manifest'), 'utf8'))?.[1];
 if (!version) throw new Error('manifest 缺少有效版本号');
 await rm(target, { recursive: true, force: true });

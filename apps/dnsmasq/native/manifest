@@ -1,4 +1,4 @@
-appname = dnsmasq
+appname = dnsmasq-for-fnos
 version = 0.1.0
 display_name = Dnsmasq for fnOS
 desc = Dnsmasq for fnOS
@@ -7,7 +7,7 @@ source = thirdparty
 maintainer = hpyer
 distributor = hpyer
 desktop_uidir = ui
-desktop_applaunchname = dnsmasq.Application
+desktop_applaunchname = dnsmasq-for-fnos.Application
 checkport = false
 micro_app = true
 install_dep_apps = nodejs_v24

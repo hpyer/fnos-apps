@@ -9,7 +9,7 @@ data="${TRIM_PKGVAR:-}"
 [ -n "$data" ] || exit 0
 canonical=$(readlink -f "$data" 2>/dev/null || true)
 case "$canonical" in
-  /vol*/@appdata/dnsmasq|/vol*/@appdata/dnsmasq/var|/vol*/@appcenter/dnsmasq/var|/var/apps/dnsmasq/var) rm -rf -- "$canonical" ;;
+  /vol*/@appdata/dnsmasq-for-fnos|/vol*/@appdata/dnsmasq-for-fnos/var|/vol*/@appcenter/dnsmasq-for-fnos/var|/var/apps/dnsmasq-for-fnos/var) rm -rf -- "$canonical" ;;
   *) echo "拒绝清理非应用数据路径：$canonical" >&2 ;;
 esac
 exit 0

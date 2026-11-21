@@ -2,7 +2,7 @@ import http from 'node:http';
 import { chmod, readFile, rm } from 'node:fs/promises';
 import { AppError } from './errors.mjs';
 
-export const PREFIX = '/app/dnsmasq';
+export const PREFIX = '/app/dnsmasq-for-fnos';
 const TYPES = { 'index.html': 'text/html; charset=utf-8', 'index.js': 'text/javascript; charset=utf-8', 'index.css': 'text/css; charset=utf-8' };
 const HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'" };
 function json(response, status, value) { response.writeHead(status, { ...HEADERS, 'content-type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)); }

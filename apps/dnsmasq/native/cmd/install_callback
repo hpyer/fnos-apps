@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 if [ "$(id -u)" -eq 0 ] && [ -x "${TRIM_APPDEST}/app/bin/setup-privileges" ]; then
-  install -d -m 0755 -o root -g root /usr/local/lib/dnsmasq
-  install -m 0755 -o root -g root "${TRIM_APPDEST}/app/bin/setup-privileges" /usr/local/lib/dnsmasq/setup-privileges
-  install -m 0755 -o root -g root "${TRIM_APPDEST}/app/bin/dnsmasq-caps" /usr/local/lib/dnsmasq/dnsmasq-caps
-  /usr/local/lib/dnsmasq/setup-privileges "${TRIM_APPDEST}" && /usr/local/lib/dnsmasq/dnsmasq-caps apply "${TRIM_APPDEST}/app/bin/dnsmasq" || echo 'warning: failed to install dnsmasq helper or capability' >&2
+  install -d -m 0755 -o root -g root /usr/local/lib/dnsmasq-for-fnos
+  install -m 0755 -o root -g root "${TRIM_APPDEST}/app/bin/setup-privileges" /usr/local/lib/dnsmasq-for-fnos/setup-privileges
+  install -m 0755 -o root -g root "${TRIM_APPDEST}/app/bin/dnsmasq-caps" /usr/local/lib/dnsmasq-for-fnos/dnsmasq-caps
+  /usr/local/lib/dnsmasq-for-fnos/setup-privileges "${TRIM_APPDEST}" && /usr/local/lib/dnsmasq-for-fnos/dnsmasq-caps apply "${TRIM_APPDEST}/app/bin/dnsmasq" || echo 'warning: failed to install dnsmasq helper or capability' >&2
 fi
 exit 0

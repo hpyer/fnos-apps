@@ -2,7 +2,7 @@
 set -eu
 [ "$(id -u)" -eq 0 ] || { echo 'dnsmasq-caps requires root' >&2; exit 1; }
 [ "${1:-}" = apply ] || { echo 'usage: dnsmasq-caps apply <binary>' >&2; exit 2; }
-TARGET="${2:-}"; case "$TARGET" in /var/apps/dnsmasq/target/app/bin/dnsmasq|/vol*/@appdata/dnsmasq/target/app/bin/dnsmasq|/vol*/@appcenter/dnsmasq/target/app/bin/dnsmasq) ;; *) echo 'invalid dnsmasq path' >&2; exit 2 ;; esac
+TARGET="${2:-}"; case "$TARGET" in /var/apps/dnsmasq-for-fnos/target/app/bin/dnsmasq|/vol*/@appdata/dnsmasq-for-fnos/target/app/bin/dnsmasq|/vol*/@appcenter/dnsmasq-for-fnos/target/app/bin/dnsmasq) ;; *) echo 'invalid dnsmasq path' >&2; exit 2 ;; esac
 [ -f "$TARGET" ] || { echo 'dnsmasq binary not found' >&2; exit 1; }
 SETCAP=$(command -v setcap 2>/dev/null || true); [ -n "$SETCAP" ] || { echo 'setcap not found' >&2; exit 1; }
 exec "$SETCAP" cap_net_bind_service+ep "$TARGET"
