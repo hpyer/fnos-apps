@@ -7,13 +7,14 @@ const TYPES = { 'index.html': 'text/html; charset=utf-8', 'index.js': 'text/java
 const HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'" };
 function json(response, status, value) { response.writeHead(status, { ...HEADERS, 'content-type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)); }
 async function body(request) { const chunks = []; let size = 0; for await (const chunk of request) { size += chunk.length; if (size > 1024 * 1024) throw new AppError('请求内容过大', 413); chunks.push(chunk); } if (!chunks.length) return {}; try { return JSON.parse(Buffer.concat(chunks)); } catch { throw new AppError('请求不是有效 JSON'); } }
-function admin(request, server, devPort) { if (request.headers['sec-fetch-site'] === 'cross-site') return false; if (devPort) return request.headers.host === `127.0.0.1:${server.address().port}`; return /^\d+$/.test(request.headers['x-trim-userid'] || '') && request.headers['x-trim-isadmin'] === 'true'; }
+function admin(request, server, dev) { if (request.headers['sec-fetch-site'] === 'cross-site') return false; if (dev) return request.headers.host === `127.0.0.1:${server.address().port}`; return /^\d+$/.test(request.headers['x-trim-userid'] || '') && request.headers['x-trim-isadmin'] === 'true'; }
 
-export async function serve(manager, { assets, socket = '', devPort = 0 } = {}) {
+export async function serve(manager, { assets, socket = '', devPort } = {}) {
+  const dev = !socket;
   const files = new Map(await Promise.all(Object.keys(TYPES).map(async name => [name, await readFile(new URL(name, assets))])));
   const server = http.createServer(async (request, response) => {
     try {
-      const url = new URL(request.url, 'http://localhost'); if (!admin(request, server, devPort)) return json(response, 403, { error: '仅限飞牛管理员访问' });
+      const url = new URL(request.url, 'http://localhost'); if (!admin(request, server, dev)) return json(response, 403, { error: '仅限飞牛管理员访问' });
       if (url.pathname === PREFIX && request.method === 'GET') { response.writeHead(302, { ...HEADERS, location: `${PREFIX}/` }); return response.end(); }
       const asset = url.pathname === `${PREFIX}/` ? 'index.html' : url.pathname.startsWith(`${PREFIX}/`) ? url.pathname.slice(PREFIX.length + 1) : '';
       if (request.method === 'GET' && TYPES[asset]) { response.writeHead(200, { ...HEADERS, 'content-type': TYPES[asset] }); return response.end(files.get(asset)); }
@@ -30,6 +31,6 @@ export async function serve(manager, { assets, socket = '', devPort = 0 } = {}) 
       if (!actions[action]) return json(response, 404, { error: '未找到接口' }); return json(response, 200, await actions[action]());
     } catch (error) { return json(response, error instanceof AppError ? error.status : 500, { error: error instanceof AppError ? error.message : '服务内部错误，请查看应用日志' }); }
   });
-  if (socket) await rm(socket, { force: true }); await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket || { host: '127.0.0.1', port: devPort }, resolve); }); if (socket) await chmod(socket, 0o660);
+  if (socket) await rm(socket, { force: true }); await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket || { host: '127.0.0.1', port: devPort ?? 0 }, resolve); }); if (socket) await chmod(socket, 0o660);
   return { server, close: () => new Promise(resolve => server.close(resolve)) };
 }
