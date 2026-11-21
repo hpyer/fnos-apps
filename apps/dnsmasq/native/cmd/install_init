@@ -1,5 +1,4 @@
 #!/bin/sh
-set -eu
-mkdir -p "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/runtime"
-chmod 0700 "${TRIM_PKGVAR}" "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/runtime"
+# fnOS prepares TRIM_PKGVAR and owns the surrounding install lifecycle. The
+# manager creates its private subdirectories on first start.
 exit 0
