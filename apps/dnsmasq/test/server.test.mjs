@@ -63,9 +63,23 @@ test('socket 模式只接受飞牛网关注入的管理员身份', async t => {
   assert.equal(page.status, 200);
   assert.match(page.headers['content-type'], /text\/html/);
   assert.match(page.text, /DNS 服务/);
+  // 页面必须自己引用样式与脚本；漏掉样式表会让应用在真机上以无样式 HTML 呈现。
+  assert.match(page.text, /<link rel="stylesheet" href="\.\/index\.css">/);
+  assert.match(page.text, /<script[^>]*src="\.\/index\.js"/);
   const status = await socketRequest(socket, '/api/status', { headers: ADMIN });
   assert.equal(status.status, 200);
   assert.equal(JSON.parse(status.text).running, false);
+});
+
+test('样式与脚本以正确的 MIME 类型返回且非空', async t => {
+  const { socket } = await fixture(t);
+  for (const [asset, type, marker] of [['/index.css', /text\/css/, /\.card/], ['/index.js', /javascript/, /function/]]) {
+    const response = await socketRequest(socket, asset, { headers: ADMIN });
+    assert.equal(response.status, 200);
+    assert.match(response.headers['content-type'], type);
+    assert.match(response.text, marker);
+    assert.match(response.headers['content-security-policy'], /style-src 'self'/);
+  }
 });
 
 test('socket 模式下管理接口按 x-fnos-request 与 JSON 校验', async t => {
