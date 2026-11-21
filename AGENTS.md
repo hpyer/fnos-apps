@@ -30,6 +30,11 @@
 - 卸载清理应覆盖两条路径并分别验证：保留数据时目录和配置完整保留；删除数据时应用专属数据被移除且没有越界删除。清理逻辑必须幂等，不能因为重复卸载或目录已不存在而失败。
 - 新增应用从第一版起就要包含卸载向导和数据清理；已有应用应逐步补齐。不要根据“卸载脚本被调用”就直接删除 `${TRIM_PKGVAR}`。
 
+## 提权与系统集成
+
+- 需要 root helper、修改系统文件、TUN、系统代理或 Linux capabilities 的应用，先阅读[fnOS 应用提权与开发踩坑](docs/privilege-and-pitfalls.md)。必须遵循最小 helper、参数校验、root 拥有文件、生命周期清理和真实 fnOS 验证，不得把应用整体改为 root。
+- 预编译二进制必须确认目标 CPU 基线（例如 x86-64-v3）和架构；每个 FPK 只应携带目标架构的运行时，兼容性结论需要目标 NAS 实机验证。
+
 ## 飞牛文档
 
 - 遇到 fnOS 的平台行为、manifest 字段、生命周期、权限、统一网关、开放 API 或 `fnpack` 用法不确定时，优先查阅[飞牛开发文档](https://developer.fnnas.com/docs/guide/)和[开放 API 手册](https://developer.fnnas.com/api/overview/)；不要根据其它平台经验猜测。
