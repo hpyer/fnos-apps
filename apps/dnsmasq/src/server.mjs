@@ -58,6 +58,7 @@ export async function serve(manager, { assets, socket = '', devPort } = {}) {
         'service/start': () => manager.start(),
         'service/stop': () => manager.stop(),
         'service/restart': () => manager.restart(),
+        'hosts/sync': () => manager.setHostsSync(input.enabled === true, { password: String(input.password || ''), user }),
         'privilege/init': () => manager.initializeServiceMode({ password: String(input.password || ''), user }),
         'privilege/apply': () => manager.applyCapability({ password: String(input.password || ''), user }),
       };

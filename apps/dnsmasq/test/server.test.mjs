@@ -35,6 +35,7 @@ function createManager() {
   manager.stop = async () => { calls.push(['stop']); manager.running = false; return manager.status(); };
   manager.restart = async () => { calls.push(['restart']); return manager.status(); };
   manager.initializeServiceMode = async input => { calls.push(['initializeServiceMode', input]); return manager.status(); };
+  manager.setHostsSync = async (enabled, options) => { calls.push(['setHostsSync', enabled, options]); return manager.status(); };
   manager.applyCapability = async input => { calls.push(['applyCapability', input]); return manager.status(); };
   return manager;
 }
@@ -147,3 +148,13 @@ test('初始化接口拒绝未经凭据通道的明文密码', async t => {
   assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: '', user: '' }]);
 });
 
+test('hosts 同步接口走专用的受控操作', async t => {
+  const { socket, manager } = await fixture(t);
+  const response = await socketRequest(socket, '/api/hosts/sync', {
+    method: 'POST',
+    headers: { ...ADMIN, 'content-type': 'application/json', 'x-fnos-request': '1' },
+    body: JSON.stringify({ enabled: true }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(manager.calls.at(-1), ['setHostsSync', true, { password: '', user: '' }]);
+});

@@ -1,0 +1,65 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" -eq 0 ] || { echo 'hosts-sync requires root' >&2; exit 1; }
+ACTION="${1:-}"
+BEGIN='# BEGIN dnsmasq-for-fnos hosts'
+END='# END dnsmasq-for-fnos hosts'
+HOSTS=$(readlink -f /etc/hosts 2>/dev/null || echo /etc/hosts)
+[ -f "$HOSTS" ] || { echo '/etc/hosts not found' >&2; exit 1; }
+
+case "$ACTION" in
+  status)
+    if grep -qF "$BEGIN" "$HOSTS"; then exit 0; else exit 3; fi
+    ;;
+  remove)
+    ;;
+  apply)
+    SNIPPET=$(readlink -f -- "${2:-}" 2>/dev/null || true)
+    case "$SNIPPET" in
+      /var/apps/dnsmasq-for-fnos/var/runtime/hosts.snippet|/vol*/@appdata/dnsmasq-for-fnos/var/runtime/hosts.snippet|/vol*/@appdata/dnsmasq-for-fnos/runtime/hosts.snippet) ;;
+      *) echo 'invalid hosts snippet path' >&2; exit 2 ;;
+    esac
+    [ -f "$SNIPPET" ] || { echo 'hosts snippet not found' >&2; exit 1; }
+    LC_ALL=C awk '
+      function valid_ip(ip,  n, a, i, v) {
+        if (ip ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {
+          n = split(ip, a, ".");
+          if (n != 4) return 0;
+          for (i = 1; i <= 4; i++) { v = a[i] + 0; if (v < 0 || v > 255) return 0 }
+          return 1;
+        }
+        if (ip ~ /^[0-9A-Fa-f:]+$/ && ip ~ /:/) return 1;
+        return 0;
+      }
+      { line = $0; sub(/\r$/, "", line); if (line == "" || line ~ /^#/) next;
+        split(line, fields, /[[:space:]]+/);
+        if (!valid_ip(fields[1]) || fields[2] !~ /^[A-Za-z0-9.-]+$/) { print "invalid hosts entry: " line > "/dev/stderr"; exit 1 }
+        count++; if (count > 5000) { print "too many hosts entries" > "/dev/stderr"; exit 1 } }
+    ' "$SNIPPET" || exit 1
+    ;;
+  *)
+    echo 'usage: hosts-sync apply <snippet> | remove | status' >&2
+    exit 2
+    ;;
+esac
+
+TMP=$(mktemp "$HOSTS.XXXXXX")
+trap 'rm -f "$TMP"' EXIT HUP INT TERM
+awk -v begin="$BEGIN" -v end="$END" '
+  $0 == begin { skip = 1; next }
+  $0 == end { skip = 0; next }
+  !skip { print }
+' "$HOSTS" > "$TMP"
+if [ "$ACTION" = apply ] && [ -s "$SNIPPET" ]; then
+  printf '%s\n' "$BEGIN" >> "$TMP"
+  sed 's/\r$//' "$SNIPPET" | grep -v '^$' >> "$TMP" || true
+  printf '%s\n' "$END" >> "$TMP"
+fi
+chmod --reference="$HOSTS" "$TMP" 2>/dev/null || chmod 0644 "$TMP"
+chown --reference="$HOSTS" "$TMP" 2>/dev/null || chown root:root "$TMP"
+if ! mv -f "$TMP" "$HOSTS" 2>/dev/null; then
+  # Some systems bind-mount /etc/hosts, where rename cannot replace the file.
+  cat "$TMP" > "$HOSTS"
+  rm -f "$TMP"
+fi
+trap - EXIT HUP INT TERM

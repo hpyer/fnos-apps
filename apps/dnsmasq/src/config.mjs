@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { fail } from './errors.mjs';
 
-export const DEFAULT_SETTINGS = Object.freeze({ listenAddresses: ['127.0.0.1'], upstreams: ['223.5.5.5', '119.29.29.29'], cacheSize: 1000, queryLogging: false, autoStart: false });
+export const DEFAULT_SETTINGS = Object.freeze({ listenAddresses: ['127.0.0.1'], upstreams: ['223.5.5.5', '119.29.29.29'], cacheSize: 1000, queryLogging: false, autoStart: false, hostsSync: false });
 const DOMAIN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.?$/i;
 function list(value, label, max = 32) { if (!Array.isArray(value) || value.length > max) fail(`${label}格式不正确`); return value.map(item => String(item).trim()).filter(Boolean); }
 export function validateSettings(input = {}) {
@@ -9,7 +9,7 @@ export function validateSettings(input = {}) {
   if (!settings.listenAddresses.length || !settings.listenAddresses.every(value => isIP(value))) fail('监听地址必须是 IPv4 或 IPv6 地址');
   if (!settings.upstreams.length || !settings.upstreams.every(value => isIP(value))) fail('上游 DNS 必须是 IPv4 或 IPv6 地址');
   settings.cacheSize = Number(settings.cacheSize); if (!Number.isInteger(settings.cacheSize) || settings.cacheSize < 0 || settings.cacheSize > 100000) fail('缓存大小必须是 0 到 100000 的整数');
-  settings.queryLogging = settings.queryLogging === true; settings.autoStart = settings.autoStart === true; return settings;
+  settings.queryLogging = settings.queryLogging === true; settings.autoStart = settings.autoStart === true; settings.hostsSync = settings.hostsSync === true; return settings;
 }
 export function validateRecord(input = {}) {
   const type = input.type === 'suffix' ? 'suffix' : input.type === 'exact' ? 'exact' : ''; const domain = String(input.domain || '').trim().toLowerCase().replace(/\.$/, '');
@@ -26,4 +26,16 @@ export function renderConfig(settingsInput, recordsInput = [], { pidFile = '' } 
   if (settings.queryLogging) lines.push('log-queries');
   for (const record of records) { if (record.type === 'exact') lines.push(`host-record=${record.domain},${record.addresses.join(',')}`); else for (const address of record.addresses) lines.push(`address=/${record.domain}/${address}`); }
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Build the exact-name /etc/hosts entries for the current records.
+ * /etc/hosts has no wildcard syntax, so a suffix record only contributes its
+ * apex domain; subdomains must be added as exact records.
+ */
+export function buildHostsSnippet(recordsInput = []) {
+  const records = normalizeRecords(recordsInput); const entries = new Set();
+  for (const record of records) for (const address of record.addresses) entries.add(`${address} ${record.domain}`);
+  if (entries.size > 2000) fail('解析记录过多，无法同步到 NAS hosts（最多 2000 条地址映射）');
+  return entries.size ? `${[...entries].sort().join('\n')}\n` : '';
 }

@@ -99,6 +99,8 @@ function renderSettings(status) {
   $('#cache').value = status.settings.cacheSize;
   $('#logging').checked = status.settings.queryLogging;
   $('#auto').checked = status.settings.autoStart;
+  $('#hosts-sync').checked = Boolean(status.settings.hostsSync);
+  $('#hosts-sync').disabled = !status.platformSupported;
 }
 
 function recordRow(record, index) {
@@ -193,15 +195,21 @@ function renderDiagnostics(data) {
   diagnosticRow(list, '53 端口能力', data.capability === true ? '已授予' : data.capability === false ? '未授予' : '未知', data.capability === true ? 'ok' : data.capability === false ? 'warn' : '');
   diagnosticRow(list, '运行平台', `${data.platform}${data.platformSupported ? '' : '（不支持）'}`, data.platformSupported ? '' : 'warn');
   diagnosticRow(list, 'dnsmasq', `${data.binary}${data.binaryExists ? '' : '（缺失）'}`, data.binaryExists ? '' : 'bad');
+  diagnosticRow(list, 'NAS hosts', !data.settings?.hostsSync ? '未启用' : data.hostsSyncActive ? '已同步' : '已启用，未写入', !data.settings?.hostsSync ? '' : data.hostsSyncActive ? 'ok' : 'warn');
   if (data.capabilityError) diagnosticRow(list, '权限错误', data.capabilityError, 'bad');
+  if (data.hostsSyncError) diagnosticRow(list, 'hosts 错误', data.hostsSyncError, 'bad');
   if (data.lastError) diagnosticRow(list, '最近错误', data.lastError, 'bad');
   body.append(list);
 
   if (!data.helperReady || data.capability === false) {
     body.append(diagAction(data.helperReady ? '53 端口能力尚未授予，需要管理员授权一次。' : '运行权限尚未初始化，需要管理员授权一次。', data.helperReady ? '重新授予权限' : '初始化运行权限', () => authorizePrivileges({ thenStart: true })));
   }
+  if (data.settings?.hostsSync && (!data.hostsSyncActive || data.hostsSyncError)) {
+    body.append(diagAction('NAS hosts 同步未生效，可重新写入一次。', '重新同步 hosts', () => toggleHostsSync(true)));
+  }
 
   body.append(detailsBlock('生成的配置', data.config));
+  if (data.settings?.hostsSync) body.append(detailsBlock('hosts 同步内容', data.hostsSnippet));
   body.append(detailsBlock('最近日志', data.lastOutput || data.logTail));
 }
 
@@ -268,6 +276,31 @@ async function authorizePrivileges({ thenStart = false } = {}) {
   return true;
 }
 
+async function toggleHostsSync(enabled) {
+  const input = $('#hosts-sync');
+  input.disabled = true;
+  const apply = password => send('hosts/sync', password ? { enabled, password } : { enabled });
+  try {
+    await apply('');
+    toast(enabled ? '已同步到 NAS hosts' : '已移除 NAS hosts 同步');
+    await refresh();
+  } catch (error) {
+    if (/运行权限未初始化|管理员|权限|sudo|密码/.test(error.message)) {
+      const password = await askPassword('管理员授权', '同步 NAS hosts 需要管理员授权一次。请输入当前 NAS 管理员密码，密码仅用于本次提权且不会被保存。');
+      if (password) {
+        try { await apply(password); toast(enabled ? '已同步到 NAS hosts' : '已移除 NAS hosts 同步'); await refresh(); }
+        catch (retry) { toast(retry.message); await refresh(); }
+      } else { await refresh(); }
+    } else {
+      toast(error.message);
+      await refresh();
+    }
+  } finally {
+    input.checked = Boolean(state.status?.settings.hostsSync);
+    input.disabled = !state.status?.platformSupported;
+  }
+}
+
 async function startService(authorized = false) {
   if (state.busy) return;
   setBusy(true);
@@ -311,6 +344,7 @@ $('#start').addEventListener('click', () => startService(false));
 $('#stop').addEventListener('click', stopService);
 $('#restart').addEventListener('click', restartService);
 $('#diagnose').addEventListener('click', loadDiagnostics);
+$('#hosts-sync').addEventListener('change', event => toggleHostsSync(event.target.checked));
 
 for (const selector of ['#listen', '#upstreams', '#cache', '#logging', '#auto']) {
   $(selector).addEventListener('input', () => { state.settingsDirty = true; });

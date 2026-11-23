@@ -73,6 +73,8 @@
           <legend>选项</legend>
           <label class="check"><input id="logging" type="checkbox"><span>记录 DNS 查询日志</span></label>
           <label class="check"><input id="auto" type="checkbox"><span>应用启动时自动启动 DNS</span></label>
+          <label class="check"><input id="hosts-sync" type="checkbox"><span>把解析记录同步到 NAS 的 hosts</span></label>
+          <p class="hint">hosts 不支持通配符：精确记录按域名写入，后缀记录只写入域名本身；子域名请另加精确记录。</p>
         </fieldset>
         <div class="form-actions"><span class="muted">配置写入应用数据目录</span><button class="primary" type="submit">保存并应用</button></div>
       </form>

@@ -66,3 +66,18 @@ test('reports missing 53 capability instead of a bare exit status', async () => 
     assert.doesNotMatch(manager.status().lastError, /退出状态 2/);
   } finally { await manager.close(); }
 });
+
+test('hosts sync requires the root helper before enabling', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-dnsmasq-hosts-'));
+  const manager = new DnsmasqManager(root, { appRoot: root, binary: '/missing/dnsmasq', platform: 'linux', arch: 'x64', run: async () => '', privilegedHelperDir: path.join(root, 'helpers') });
+  try {
+    await manager.init();
+    await manager.saveRecords([{ type: 'suffix', domain: 'lan.home.arpa', addresses: ['192.168.1.20'] }]);
+    await assert.rejects(() => manager.setHostsSync(true), /运行权限未初始化/);
+    assert.equal(manager.settings.hostsSync, false);
+    manager.settings.hostsSync = true;
+    await manager.setHostsSync(false);
+    assert.equal(manager.settings.hostsSync, false);
+    assert.equal(JSON.parse(await readFile(path.join(root, 'state.json'), 'utf8')).hostsSync, false);
+  } finally { await manager.close(); }
+});

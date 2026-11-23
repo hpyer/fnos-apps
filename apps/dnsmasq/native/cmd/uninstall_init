@@ -1,5 +1,11 @@
 #!/bin/sh
 set -eu
+HELPER=/usr/local/lib/dnsmasq-for-fnos/hosts-sync
+if [ -x "$HELPER" ]; then
+  if [ "$(id -u)" -eq 0 ]; then "$HELPER" remove 2>/dev/null || true
+  else sudo -n "$HELPER" remove 2>/dev/null || true
+  fi
+fi
 if [ -r "${TRIM_PKGVAR}/manager.pid" ]; then kill "$(cat "${TRIM_PKGVAR}/manager.pid")" 2>/dev/null || true; fi
 if [ "$(id -u)" -eq 0 ]; then rm -f /etc/sudoers.d/dnsmasq-for-fnos; rm -rf /usr/local/lib/dnsmasq-for-fnos; fi
 exit 0

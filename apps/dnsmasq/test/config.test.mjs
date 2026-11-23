@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, renderConfig, validateRecord, validateSettings } from '../src/config.mjs';
+import { DEFAULT_SETTINGS, buildHostsSnippet, renderConfig, validateRecord, validateSettings } from '../src/config.mjs';
 
 test('renders DNS-only config without DHCP or system resolver', () => {
   const source = renderConfig({ ...DEFAULT_SETTINGS, listenAddresses: ['127.0.0.1', '192.168.1.10'], upstreams: ['1.1.1.1'], queryLogging: true }, [
@@ -21,4 +21,14 @@ test('writes runtime pid file and keeps dnsmasq logs on stderr', () => {
   assert.match(source, /^pid-file=\/data\/runtime\/dnsmasq\.pid$/m);
   assert.match(source, /^log-facility=-$/m);
   assert.doesNotMatch(source, /^log-queries$/m);
+});
+
+test('hosts snippet contains exact names and suffix apexes only', () => {
+  const snippet = buildHostsSnippet([
+    { type: 'exact', domain: 'nas.home.arpa', addresses: ['192.168.1.20'] },
+    { type: 'suffix', domain: 'lan.home.arpa', addresses: ['192.168.1.20', '192.168.1.21'] },
+  ]);
+  assert.equal(snippet, '192.168.1.20 lan.home.arpa\n192.168.1.20 nas.home.arpa\n192.168.1.21 lan.home.arpa\n');
+  assert.doesNotMatch(snippet, /\*/);
+  assert.equal(buildHostsSnippet([]), '');
 });

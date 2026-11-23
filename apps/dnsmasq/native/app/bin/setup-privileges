@@ -12,22 +12,22 @@ SELF=$(readlink -f -- "$0" 2>/dev/null || echo "$0")
 SELF_DIR=$(dirname "$SELF")
 SRC=""
 for candidate in "$APP_DEST/bin" "$APP_DEST/app/bin" "$SELF_DIR"; do
-  if [ -f "$candidate/dnsmasq-caps" ] && [ -f "$candidate/setup-privileges" ]; then SRC="$candidate"; break; fi
+  if [ -f "$candidate/dnsmasq-caps" ] && [ -f "$candidate/setup-privileges" ] && [ -f "$candidate/hosts-sync" ]; then SRC="$candidate"; break; fi
 done
 if [ -z "$SRC" ]; then
   for base in "$APP_DEST" "$(dirname "$APP_DEST")"; do
     found=$(find "$base" -maxdepth 4 -type f -name dnsmasq-caps 2>/dev/null | head -n 1)
-    if [ -n "$found" ] && [ -f "$(dirname "$found")/setup-privileges" ]; then SRC=$(dirname "$found"); break; fi
+    if [ -n "$found" ] && [ -f "$(dirname "$found")/setup-privileges" ] && [ -f "$(dirname "$found")/hosts-sync" ]; then SRC=$(dirname "$found"); break; fi
   done
 fi
 [ -n "$SRC" ] || { echo "missing helper: dnsmasq-caps (searched $APP_DEST)" >&2; exit 1; }
 install -d -m 0755 -o root -g root "$INSTALL_DIR"
-for helper in dnsmasq-caps setup-privileges; do
+for helper in dnsmasq-caps setup-privileges hosts-sync; do
   if [ "$SRC/$helper" != "$INSTALL_DIR/$helper" ]; then
     install -m 0755 -o root -g root "$SRC/$helper" "$INSTALL_DIR/$helper"
   fi
 done
-for helper in dnsmasq-caps setup-privileges; do
+for helper in dnsmasq-caps setup-privileges hosts-sync; do
   owner=$(stat -c '%u' "$INSTALL_DIR/$helper")
   mode=$(stat -c '%a' "$INSTALL_DIR/$helper")
   [ "$owner" = 0 ] || { echo "helper not owned by root: $helper" >&2; exit 1; }
@@ -38,7 +38,7 @@ trap 'rm -f "$TMP"' EXIT HUP INT TERM
 cat >"$TMP" <<EOF
 # Managed by Dnsmasq for fnOS; keep the helper surface minimal.
 Defaults:$USER_NAME !requiretty
-$USER_NAME ALL=(root) NOPASSWD: $INSTALL_DIR/dnsmasq-caps apply *
+$USER_NAME ALL=(root) NOPASSWD: $INSTALL_DIR/dnsmasq-caps apply *, $INSTALL_DIR/hosts-sync apply *, $INSTALL_DIR/hosts-sync remove
 EOF
 if command -v visudo >/dev/null 2>&1; then
   visudo -cf "$TMP" >/dev/null || { echo 'sudoers validation failed' >&2; exit 1; }
