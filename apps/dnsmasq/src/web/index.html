@@ -1,2 +1,118 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DNS 服务</title><link rel="stylesheet" href="./index.css"></head><body><main id="app"><header><div><p class="eyebrow">NETWORK SERVICE</p><h1>DNS 服务</h1><p class="muted">管理本机 DNS 缓存、上游服务器和域名解析记录</p></div><span id="status" class="pill">读取中</span></header><nav><button data-page="overview" class="active">概览</button><button data-page="settings">DNS 设置</button><button data-page="records">解析记录</button><button data-page="diagnostics">诊断</button></nav><section id="overview" class="page active"><div class="card hero"><div><p class="eyebrow">SERVICE STATUS</p><h2 id="service-state">读取中</h2><p id="service-detail" class="muted">正在读取服务状态</p></div><div class="actions"><button id="start" class="primary">启动</button><button id="stop">停止</button><button id="restart">重启</button></div></div><div class="grid"><div class="card"><h3>监听地址</h3><p id="listen-summary" class="value">—</p></div><div class="card"><h3>上游 DNS</h3><p id="upstream-summary" class="value">—</p></div><div class="card"><h3>解析记录</h3><p id="record-summary" class="value">—</p></div></div></section><section id="settings" class="page"><div class="card"><h2>DNS 设置</h2><form id="settings-form"><label>监听地址<span>每行一个 IPv4 或 IPv6 地址</span><textarea id="listen" rows="3"></textarea></label><label>上游 DNS<span>不使用系统 resolv.conf</span><textarea id="upstreams" rows="3"></textarea></label><label>缓存大小<input id="cache" type="number" min="0" max="100000"></label><label class="check"><input id="logging" type="checkbox">记录 DNS 查询日志</label><label class="check"><input id="auto" type="checkbox">应用启动时自动启动 DNS</label><button class="primary" type="submit">保存并应用</button></form></div></section><section id="records" class="page"><div class="card"><div class="section-title"><div><h2>解析记录</h2><p class="muted">精确记录匹配单个域名，后缀记录匹配该域名及其子域名。</p></div><button id="add-record">新增记录</button></div><div id="records-list"></div><form id="record-form" class="record-form hidden"><select id="record-type"><option value="exact">精确记录</option><option value="suffix">后缀记录</option></select><input id="record-domain" placeholder="例如 nas.example.com" required><input id="record-addresses" placeholder="IP 地址，逗号分隔" required><button class="primary" type="submit">添加</button><button type="button" id="cancel-record">取消</button></form></div></section><section id="diagnostics" class="page"><div class="card"><div class="section-title"><div><h2>诊断</h2><p class="muted">用于确认二进制、配置和目标环境。</p></div><button id="refresh-diagnostics">刷新</button></div><pre id="diagnostic-output">—</pre></div></section><div id="toast" role="status"></div></main><script type="module" src="./index.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DNS 服务</title>
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+<main id="app">
+  <header class="topbar">
+    <div class="identity">
+      <span id="status-dot" class="dot" aria-hidden="true"></span>
+      <div class="identity-text">
+        <h1>DNS 服务</h1>
+        <p id="top-detail" class="top-detail">正在读取服务状态</p>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="页面">
+      <button type="button" data-page="overview" class="active">概览</button>
+      <button type="button" data-page="settings">设置</button>
+      <button type="button" data-page="records">解析记录</button>
+    </nav>
+    <div class="top-actions">
+      <button type="button" id="start" class="primary">启动</button>
+      <button type="button" id="restart" class="hidden">重启</button>
+      <button type="button" id="stop" class="hidden">停止</button>
+    </div>
+  </header>
+
+  <section id="overview" class="page active">
+    <div id="alert" class="alert hidden" role="status"></div>
+
+    <div class="panel status-panel">
+      <div class="status-copy">
+        <p class="eyebrow">SERVICE</p>
+        <h2 id="service-state">已停止</h2>
+        <p id="service-detail" class="muted">正在读取服务状态</p>
+      </div>
+      <dl class="metrics">
+        <div><dt>监听地址</dt><dd id="listen-summary">—</dd></div>
+        <div><dt>上游 DNS</dt><dd id="upstream-summary">—</dd></div>
+        <div><dt>解析记录</dt><dd id="record-summary">—</dd></div>
+        <div><dt>缓存大小</dt><dd id="cache-summary">—</dd></div>
+      </dl>
+    </div>
+
+    <div class="panel diagnostics-panel">
+      <div class="panel-head">
+        <div>
+          <h2>诊断</h2>
+          <p class="muted">检查运行权限、二进制与生成的配置</p>
+        </div>
+        <button type="button" id="diagnose">运行诊断</button>
+      </div>
+      <div id="diagnostic-body" class="diagnostic-body hidden"></div>
+    </div>
+  </section>
+
+  <section id="settings" class="page">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>DNS 设置</h2>
+          <p class="muted">保存后立即生效，运行中的服务会自动重启</p>
+        </div>
+      </div>
+      <form id="settings-form" class="form-grid">
+        <label class="field">监听地址<span>每行一个本机 IPv4 或 IPv6 地址</span><textarea id="listen" rows="2" spellcheck="false"></textarea></label>
+        <label class="field">上游 DNS<span>每行一个，不使用系统 resolv.conf</span><textarea id="upstreams" rows="2" spellcheck="false"></textarea></label>
+        <label class="field">缓存大小<span>0 表示禁用缓存</span><input id="cache" type="number" min="0" max="100000" inputmode="numeric"></label>
+        <fieldset class="field switches">
+          <legend>选项</legend>
+          <label class="check"><input id="logging" type="checkbox"><span>记录 DNS 查询日志</span></label>
+          <label class="check"><input id="auto" type="checkbox"><span>应用启动时自动启动 DNS</span></label>
+        </fieldset>
+        <div class="form-actions"><span class="muted">配置写入应用数据目录</span><button class="primary" type="submit">保存并应用</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="records" class="page">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>解析记录</h2>
+          <p class="muted">精确记录匹配单个域名，后缀记录匹配该域名及其子域名</p>
+        </div>
+        <button type="button" id="add-record" class="primary">新增记录</button>
+      </div>
+      <form id="record-form" class="record-form hidden">
+        <select id="record-type" aria-label="记录类型"><option value="exact">精确</option><option value="suffix">后缀</option></select>
+        <input id="record-domain" placeholder="nas.example.com" autocomplete="off" spellcheck="false" required>
+        <input id="record-addresses" placeholder="IP 地址，逗号分隔" autocomplete="off" spellcheck="false" required>
+        <button class="primary" type="submit">添加</button>
+        <button type="button" id="cancel-record">取消</button>
+      </form>
+      <div id="records-list" class="records"></div>
+    </div>
+  </section>
+
+  <div id="password-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="password-title">
+    <div class="modal-card">
+      <h2 id="password-title">管理员授权</h2>
+      <p id="password-text" class="muted"></p>
+      <input id="password-input" type="password" autocomplete="current-password" spellcheck="false">
+      <div class="modal-actions">
+        <button type="button" id="password-cancel">取消</button>
+        <button type="button" id="password-accept" class="primary">授权</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+</main>
+<script type="module" src="./index.js"></script>
+</body>
+</html>

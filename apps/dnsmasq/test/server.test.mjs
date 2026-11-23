@@ -69,6 +69,9 @@ test('socket 模式只接受飞牛网关注入的管理员身份', async t => {
   // 页面必须自己引用样式与脚本；漏掉样式表会让应用在真机上以无样式 HTML 呈现。
   assert.match(page.text, /<link rel="stylesheet" href="\.\/index\.css">/);
   assert.match(page.text, /<script[^>]*src="\.\/index\.js"/);
+  // 诊断默认收在概览里，只保留一个按钮，不再单独占一个导航页。
+  assert.match(page.text, /id="diagnose"/);
+  assert.doesNotMatch(page.text, /data-page="diagnostics"/);
   const status = await socketRequest(socket, '/api/status', { headers: ADMIN });
   assert.equal(status.status, 200);
   assert.equal(JSON.parse(status.text).running, false);
@@ -76,7 +79,7 @@ test('socket 模式只接受飞牛网关注入的管理员身份', async t => {
 
 test('样式与脚本以正确的 MIME 类型返回且非空', async t => {
   const { socket } = await fixture(t);
-  for (const [asset, type, marker] of [['/index.css', /text\/css/, /\.card/], ['/index.js', /javascript/, /function/]]) {
+  for (const [asset, type, marker] of [['/index.css', /text\/css/, /\.panel/], ['/index.js', /javascript/, /function/]]) {
     const response = await socketRequest(socket, asset, { headers: ADMIN });
     assert.equal(response.status, 200);
     assert.match(response.headers['content-type'], type);
@@ -143,3 +146,4 @@ test('初始化接口拒绝未经凭据通道的明文密码', async t => {
   assert.equal(response.status, 200);
   assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: '', user: '' }]);
 });
+
