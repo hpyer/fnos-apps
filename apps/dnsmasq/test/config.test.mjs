@@ -15,3 +15,10 @@ test('rejects config injection and invalid addresses', () => {
   assert.throws(() => validateRecord({ type: 'exact', domain: 'bad domain', addresses: ['1.1.1.1'] }), /域名/);
   assert.throws(() => validateRecord({ type: 'exact', domain: 'nas.example.com', addresses: ['1.1.1.1\nserver=x'] }), /记录地址/);
 });
+
+test('writes runtime pid file and keeps dnsmasq logs on stderr', () => {
+  const source = renderConfig({ ...DEFAULT_SETTINGS }, [], { pidFile: '/data/runtime/dnsmasq.pid' });
+  assert.match(source, /^pid-file=\/data\/runtime\/dnsmasq\.pid$/m);
+  assert.match(source, /^log-facility=-$/m);
+  assert.doesNotMatch(source, /^log-queries$/m);
+});

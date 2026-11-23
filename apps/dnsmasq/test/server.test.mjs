@@ -4,6 +4,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { encryptCredential } from '@fnos/privilege/client';
 import { PREFIX, serve } from '../src/server.mjs';
 
 const ADMIN = { 'x-trim-userid': '1000', 'x-trim-isadmin': 'true' };
@@ -33,6 +34,8 @@ function createManager() {
   manager.start = async () => { calls.push(['start']); manager.running = true; return manager.status(); };
   manager.stop = async () => { calls.push(['stop']); manager.running = false; return manager.status(); };
   manager.restart = async () => { calls.push(['restart']); return manager.status(); };
+  manager.initializeServiceMode = async input => { calls.push(['initializeServiceMode', input]); return manager.status(); };
+  manager.applyCapability = async input => { calls.push(['applyCapability', input]); return manager.status(); };
   return manager;
 }
 
@@ -112,4 +115,31 @@ test('开发端口模式按 Host 校验且不信任网关请求头', async t => 
   });
   assert.equal((await request('/api/status')).status, 200);
   assert.equal((await request('/api/status', { host: 'gateway.internal', ...ADMIN })).status, 403);
+});
+
+test('凭据通道加密传输管理员密码并转发初始化请求', async t => {
+  const { socket, manager } = await fixture(t);
+  const keyResponse = await socketRequest(socket, '/api/credential-key', { headers: ADMIN });
+  assert.equal(keyResponse.status, 200);
+  const { publicKey } = JSON.parse(keyResponse.text);
+  assert.ok(publicKey);
+  const encryptedCredential = await encryptCredential('admin-secret', publicKey);
+  const response = await socketRequest(socket, '/api/privilege/init', {
+    method: 'POST',
+    headers: { ...ADMIN, 'x-trim-username': 'admin', 'content-type': 'application/json', 'x-fnos-request': '1' },
+    body: JSON.stringify({ encryptedCredential }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: 'admin-secret', user: 'admin' }]);
+});
+
+test('初始化接口拒绝未经凭据通道的明文密码', async t => {
+  const { socket, manager } = await fixture(t);
+  const response = await socketRequest(socket, '/api/privilege/init', {
+    method: 'POST',
+    headers: { ...ADMIN, 'content-type': 'application/json', 'x-fnos-request': '1' },
+    body: JSON.stringify({ password: 'plain' }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: '', user: '' }]);
 });
