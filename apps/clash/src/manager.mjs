@@ -15,7 +15,7 @@ import { LogHub } from './log-hub.mjs';
 import { redact } from './redact.mjs';
 import { CHANNELS, CoreRepository, channelConfig } from './repository.mjs';
 import { augmentSubscriptionConfig } from './config-template.mjs';
-import { DATASETS, DATASET_KEYS, MODEL_LABELS, MODEL_URLS, datasetDefaults } from './datasets.mjs';
+import { DATASETS, DATASET_KEYS, MODEL_LABELS, MODEL_URLS, datasetDefaults, normalizeDatasetUrls } from './datasets.mjs';
 import { PreparationProgress } from './progress.mjs';
 import { mirrorGithubUrl, normalizeMirror, unmirrorGithubUrl } from './mirror.mjs';
 import { configInfo, directProxies, ensureTunDns, injectController, proxyProviders, setTunEnabled, topLevelValue } from './yaml.mjs';
@@ -267,7 +267,7 @@ export class ClashManager extends EventEmitter {
 
     this.version = await this.readVersion();
     this.state = { ...this.state, ...(await readJSON(this.stateFile, {})) };
-    this.state.dataUrls = { ...datasetDefaults(), ...(this.state.dataUrls && typeof this.state.dataUrls === 'object' ? this.state.dataUrls : {}) };
+    this.state.dataUrls = normalizeDatasetUrls(this.state.dataUrls);
     this.state.dataUpdatedAt = this.state.dataUpdatedAt && typeof this.state.dataUpdatedAt === 'object' ? this.state.dataUpdatedAt : {};
     if (!Object.hasOwn(MODEL_URLS, this.state.dataModel)) this.state.dataModel = 'standard';
     if (!normalizeMirror(this.state.githubMirror)) this.state.githubMirror = 'https://ghfast.top/';

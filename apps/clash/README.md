@@ -18,7 +18,7 @@ fnOS 原生的 mihomo 托管应用。管理服务、Core 和订阅任务均以�
 
 1. 安装对应架构的 FPK。应用依赖飞牛 Node.js 24；管理页面通过统一网关仅向管理员开放。
 2. 首次打开时应用会选中内置 mihomo 并自动启动 Core（可在设置中关闭自动启动）。默认配置已包含 `proxy-providers`、`节点选择 / 自动选择` 分组和基础分流规则，在「默认订阅」的 `url`（默认留空，注释提示「填入你的订阅链接」）填入机场的「Clash 提供商 / 节点列表」链接后保存即可使用；已有配置可点「载入模板」获取该模板。
-3. 首次启动 Core、校验或保存配置时，应用会检查 GeoIP / GeoSite 数据；缺失时通过当前 GitHub 加速地址自动下载，Smart 渠道还会自动准备 `Model.bin`。下载期间右下角的进度浮窗显示当前步骤、文件大小和百分比；GitHub 较慢时可能需要数分钟，请保持页面打开。
+3. 首次启动 Core、校验或保存配置时，应用会检查 GeoIP / GeoSite 数据；缺失时通过 jsDelivr 镜像自动下载 GeoIP、GeoSite、Country MMDB 和 ASN 数据，Smart 渠道还会通过 GitHub 加速地址准备 `Model.bin`。下载期间右下角的进度浮窗显示当前步骤、文件大小和百分比；网络较慢时可能需要数分钟，请保持页面打开。
 4. 首次使用系统代理或增强模式时，界面会弹出管理员密码框。密码经 ECDH(P-256) + AES-GCM 加密通道提交，应用通过 `su` 切换到当前登录的 fnOS 管理员，再用其 sudo 权限完成一次性 helper 初始化。
 5. 初始化完成后，管理服务仍是包用户；helper 位于 `/usr/local/lib/clash-for-fnos`，sudoers 规则只允许包用户执行受限 helper。
 
@@ -36,7 +36,7 @@ sudo /usr/local/lib/clash-for-fnos/setup-privileges /vol1/@appcenter/clash-for-f
 
 - 主要界面按 fnOS PC 窗口 `1100 × 640`（内容可视约 `1100 × 596`）设计；概览使用三列指标。
 - 首次准备外部数据时，右下角浮动显示进度卡片：包含准备阶段步骤、当前文件大小、百分比和已用时间，可收起；卡片不占用页面布局，切换页面或编辑配置时仍然可见。侧边栏仍只显示原有的运行状态。
-- 移动端使用底部状态/模式/导航布局，表格和表单按窄屏收敛。
+- 移动端使用底部运行状态卡、其右侧独立的代理模式下拉和底部导航，表格与表单按窄屏收敛。
 - 应用主体不重复显示 fnOS 窗口已有的应用图标和标题。
 - 「设置」页的“外部数据”、诊断和 Core 版本区域较长，按正常页面滚动使用。
 
@@ -77,7 +77,7 @@ sudo /usr/local/lib/clash-for-fnos/setup-privileges /vol1/@appcenter/clash-for-f
 - **定时测速**：间隔 `0` 表示关闭，默认 30 分钟；测速网址可修改；并发数限制 1–20。
 - **统一延迟测速**：对应 mihomo `unified-delay`。
 - **TCP 并发连接**：对应 mihomo `tcp-concurrent`。
-- **GitHub 加速**：默认 `https://ghfast.top/`，保存后对所有 GitHub 资源请求生效；留空则直连。加速地址失败时自动回退直连。
+- **GitHub 加速**：可从 `https://ghfast.top`、`https://ghproxy.net` 中选择，也可手动输入自定义地址（留空则直连）；保存后对所有 GitHub 资源请求生效，加速地址失败时自动回退直连。
 - **User-Agent**：前半部分由系统按当前内核版本和应用版本生成（如 `Mihomo/v1.19.34; ClashForFNOS/v1.0.1`），设置页只读展示；后半部分可自定义，默认 `clash.meta; clash`，拼接时自动补 `; `。最终值应用于订阅下载、数据下载、Core 版本检查/下载和应用更新检查的所有出站请求。
 - **日志级别**和**更新渠道**：日志级别同时影响 Core 与界面；渠道包括稳定版、测试版和 Smart 版。
 

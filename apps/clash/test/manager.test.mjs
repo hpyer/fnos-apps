@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeDatasetUrls } from '../src/datasets.mjs';
 import { ClashManager } from '../src/manager.mjs';
 import { hashFile } from '../src/storage.mjs';
 
@@ -454,6 +455,24 @@ test('外部数据设置与同步写入运行时目录', async t => {
   assert.equal(result.size, 8);
   assert.equal(await readFile(path.join(manager.runtimeDir, 'geoip.dat'), 'utf8'), 'geo-data');
   await assert.rejects(() => manager.saveDataSettings({ intervalHours: 0 }), /1–720/);
+});
+
+test('外部数据默认地址使用 jsDelivr 并保留自定义地址', () => {
+  const legacy = 'https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest';
+  const mirror = 'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release';
+  const model = 'https://github.com/vernesong/mihomo/releases/download/LightGBM-Model/Model.bin';
+  const urls = normalizeDatasetUrls({
+    geoip: `${legacy}/geoip.dat`,
+    geosite: 'https://example.com/custom/geosite.dat',
+    country: `${legacy}/country.mmdb`,
+    asn: `${legacy}/GeoLite2-ASN.mmdb`,
+    model,
+  });
+  assert.equal(urls.geoip, `${mirror}/geoip.dat`);
+  assert.equal(urls.geosite, 'https://example.com/custom/geosite.dat');
+  assert.equal(urls.country, `${mirror}/country.mmdb`);
+  assert.equal(urls.asn, `${mirror}/GeoLite2-ASN.mmdb`);
+  assert.equal(urls.model, model);
 });
 
 test('网络诊断返回配置、局域网地址和排查提示', async t => {

@@ -9,6 +9,7 @@ import {
 const BASE = '/app/clash-for-fnos';
 const $ = id => document.getElementById(id);
 const LOG_LEVELS = { debug: 0, info: 1, warning: 2, error: 3 };
+const GITHUB_MIRROR_PRESETS = ['https://ghfast.top/', 'https://ghproxy.net/'];
 const state = {
   status: null,
   proxies: null,
@@ -194,7 +195,13 @@ function renderSidebar(status) {
   $('side-start').setAttribute('aria-busy', starting ? 'true' : 'false');
   for (const item of [$('side-start'), $('side-stop'), $('side-restart')]) item.disabled = starting || core.state === 'stopping' || !status.platform.supported;
   $('side-start').title = starting ? '启动中…' : status.platform.supported ? '启动' : '本机预览无法启动 Linux 内核';
-  for (const item of document.querySelectorAll('.side-modes button')) item.classList.toggle('is-active', item.dataset.mode === core.mode);
+  const mode = core.mode || 'rule';
+  for (const item of document.querySelectorAll('.side-modes button, #mode-menu button')) {
+    const active = item.dataset.mode === mode;
+    item.classList.toggle('is-active', active);
+    if (item.getAttribute('role') === 'menuitemradio') item.setAttribute('aria-checked', active ? 'true' : 'false');
+  }
+  $('mode-trigger-label').textContent = modeLabel(mode);
   $('side-version').textContent = `v${status.version}`;
   $('side-platform').textContent = status.platform.arch === 'x64' ? 'x86_64' : status.platform.arch === 'arm64' ? 'ARM64' : status.platform.arch;
   const environment = status.environment || {};
@@ -1060,6 +1067,33 @@ function coreTypeLabel(item) {
   return '稳定版';
 }
 
+function mirrorWithSlash(value) {
+  const text = String(value || '').trim();
+  return text && !text.endsWith('/') ? `${text}/` : text;
+}
+
+function setGithubMirrorControl(value) {
+  const select = $('set-github-mirror-select');
+  const input = $('set-github-mirror');
+  const text = String(value ?? 'https://ghfast.top/').trim();
+  const normalized = mirrorWithSlash(text);
+  if (GITHUB_MIRROR_PRESETS.includes(normalized)) {
+    select.value = normalized;
+    input.value = '';
+    input.hidden = true;
+  } else {
+    select.value = 'custom';
+    input.value = text;
+    input.hidden = false;
+  }
+}
+
+function githubMirrorValue() {
+  return $('set-github-mirror-select').value === 'custom'
+    ? $('set-github-mirror').value.trim()
+    : $('set-github-mirror-select').value;
+}
+
 function renderSettingsForm(force = false) {
   const status = state.status;
   if (!status) return;
@@ -1075,7 +1109,7 @@ function renderSettingsForm(force = false) {
     $('set-delay-concurrency').value = String(status.settings.delayConcurrency || 5);
     $('set-unified-delay').checked = status.settings.unifiedDelay !== false;
     $('set-tcp-concurrent').checked = status.settings.tcpConcurrent !== false;
-    $('set-github-mirror').value = status.settings.githubMirror ?? 'https://ghfast.top/';
+    setGithubMirrorControl(status.settings.githubMirror);
     $('set-ua-prefix').textContent = status.settings.userAgentPrefix || '—';
     $('set-ua-suffix').value = status.settings.userAgentSuffix ?? 'clash.meta; clash';
     $('set-loglevel').value = status.settings.logLevel;
@@ -1234,10 +1268,15 @@ async function confirmCoreAction(action, item) {
 }
 
 function wireSettings() {
-  for (const element of [$('set-autostart'), $('set-autorestart'), $('set-allow-lan'), $('set-mixed-port'), $('set-http-port'), $('set-socks-port'), $('set-delay-interval'), $('set-delay-url'), $('set-delay-concurrency'), $('set-unified-delay'), $('set-tcp-concurrent'), $('set-github-mirror'), $('set-ua-suffix'), $('set-loglevel'), $('set-channel')]) {
+  for (const element of [$('set-autostart'), $('set-autorestart'), $('set-allow-lan'), $('set-mixed-port'), $('set-http-port'), $('set-socks-port'), $('set-delay-interval'), $('set-delay-url'), $('set-delay-concurrency'), $('set-unified-delay'), $('set-tcp-concurrent'), $('set-github-mirror-select'), $('set-github-mirror'), $('set-ua-suffix'), $('set-loglevel'), $('set-channel')]) {
     const event = ['number', 'text', 'url'].includes(element.type) ? 'input' : 'change';
     element.addEventListener(event, () => { state.settingsDirty = true; });
   }
+  $('set-github-mirror-select').addEventListener('change', () => {
+    const custom = $('set-github-mirror-select').value === 'custom';
+    $('set-github-mirror').hidden = !custom;
+    if (custom) $('set-github-mirror').focus();
+  });
   $('save-settings').addEventListener('click', async () => {
     const result = await privilegedAct(async password => post('settings/save', {
       autoStart: $('set-autostart').checked,
@@ -1253,7 +1292,7 @@ function wireSettings() {
       delayConcurrency: Number($('set-delay-concurrency').value || 5),
       unifiedDelay: $('set-unified-delay').checked,
       tcpConcurrent: $('set-tcp-concurrent').checked,
-      githubMirror: $('set-github-mirror').value.trim(),
+      githubMirror: githubMirrorValue(),
       userAgentSuffix: $('set-ua-suffix').value.trim(),
       password,
     }), '设置已保存');
@@ -1306,7 +1345,7 @@ function wireSettings() {
           delayConcurrency: Number($('set-delay-concurrency').value || 5),
           unifiedDelay: $('set-unified-delay').checked,
           tcpConcurrent: $('set-tcp-concurrent').checked,
-          githubMirror: $('set-github-mirror').value.trim(),
+          githubMirror: githubMirrorValue(),
           userAgentSuffix: $('set-ua-suffix').value.trim(),
           password,
         });
@@ -1502,8 +1541,22 @@ function wireSideControls() {
     if (result) notify(enabled ? (result.environment?.tunActive ? '增强模式已开启' : '已记录，启动 Core 后自动开启') : '增强模式已关闭', 'success');
     if (result && state.view === 'proxies') refreshProxies();
   });
-  for (const item of document.querySelectorAll('.side-modes button')) item.addEventListener('click', async () => {
+  const modeMenu = $('mode-menu');
+  const modeTrigger = $('mode-trigger');
+  const setModeMenuOpen = open => {
+    modeMenu.hidden = !open;
+    modeTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  modeTrigger.addEventListener('click', event => {
+    event.stopPropagation();
+    setModeMenuOpen(modeMenu.hidden);
+  });
+  modeMenu.addEventListener('click', event => event.stopPropagation());
+  document.addEventListener('click', () => { if (!modeMenu.hidden) setModeMenuOpen(false); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modeMenu.hidden) setModeMenuOpen(false); });
+  for (const item of document.querySelectorAll('.side-modes button, #mode-menu button')) item.addEventListener('click', async () => {
     const mode = item.dataset.mode;
+    setModeMenuOpen(false);
     const result = await act(() => post('mode/set', { mode }), '', { silent: true });
     if (!result) return;
     await refreshStatus();

@@ -28,6 +28,18 @@
         </div>
       </section>
 
+      <div class="mode-picker">
+        <button id="mode-trigger" class="mode-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu" title="切换代理模式">
+          <span class="mode-trigger-copy"><small>模式</small><strong id="mode-trigger-label">规则</strong></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="mode-menu" class="mode-menu" role="menu" aria-label="代理模式" hidden>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mode="rule">规则</button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mode="global">全局</button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mode="direct">直连</button>
+        </div>
+      </div>
+
       <div class="side-modes" role="group" aria-label="代理模式">
         <button type="button" data-mode="rule">规则</button>
         <button type="button" data-mode="global">全局</button>
@@ -141,18 +153,22 @@
           <div class="backup-row">
             <label for="backup-select">配置备份</label>
             <select id="backup-select"><option value="">选择备份…</option></select>
-            <button id="restore-backup" type="button">恢复</button>
-            <button id="delete-backup" type="button" class="danger">删除</button>
+            <div class="backup-actions">
+              <button id="restore-backup" type="button">恢复</button>
+              <button id="delete-backup" type="button" class="danger">删除</button>
+            </div>
           </div>
         </article>
       </section>
 
       <section id="view-connections" class="view" hidden>
-        <div class="toolbar">
+        <div class="toolbar connections-toolbar">
           <input id="conn-filter" type="search" placeholder="筛选主机、目标、规则或链路" aria-label="筛选连接">
           <span id="conn-summary" class="muted">—</span>
-          <button id="conn-refresh" type="button">刷新</button>
-          <button id="close-all" type="button" class="danger">关闭全部连接</button>
+          <div class="conn-toolbar-actions">
+            <button id="conn-refresh" type="button">刷新</button>
+            <button id="close-all" type="button" class="danger">关闭全部连接</button>
+          </div>
         </div>
         <div class="card table-card">
           <div class="conn-head" aria-hidden="true"><span>时间</span><span>网络</span><span>主机</span><span>目标</span><span>链路</span><span>规则</span><span>上传</span><span>下载</span></div>
@@ -179,11 +195,19 @@
             <div class="setting-row"><label for="set-http-port">HTTP 端口</label><input id="set-http-port" class="setting-input" type="number" min="0" max="65535" inputmode="numeric" placeholder="0 表示关闭"></div>
             <div class="setting-row"><label for="set-socks-port">SOCKS 端口</label><input id="set-socks-port" class="setting-input" type="number" min="0" max="65535" inputmode="numeric" placeholder="0 表示关闭"></div>
             <div class="setting-row"><label for="set-delay-interval">定时测速间隔（分钟）</label><input id="set-delay-interval" class="setting-input" type="number" min="0" max="1440" inputmode="numeric" placeholder="0 表示关闭"></div>
-            <div class="setting-row"><label for="set-delay-url">测速网址</label><input id="set-delay-url" class="setting-input-wide" type="url" spellcheck="false"></div>
+            <div class="setting-row stack-row"><label for="set-delay-url">测速网址</label><input id="set-delay-url" class="setting-input-wide" type="url" spellcheck="false"></div>
             <div class="setting-row"><label for="set-delay-concurrency">测速并发数</label><input id="set-delay-concurrency" class="setting-input" type="number" min="1" max="20" inputmode="numeric"></div>
             <div class="switch-row"><span>统一延迟测速</span><label class="switch"><input id="set-unified-delay" type="checkbox" aria-label="统一延迟测速"><i></i></label></div>
             <div class="switch-row"><span>TCP 并发连接</span><label class="switch"><input id="set-tcp-concurrent" type="checkbox" aria-label="TCP 并发连接"><i></i></label></div>
-            <div class="setting-row"><label for="set-github-mirror">GitHub 加速地址</label><input id="set-github-mirror" class="setting-input-wide" type="url" spellcheck="false" placeholder="https://ghfast.top/"></div>
+            <div class="setting-row stack-row">
+              <label for="set-github-mirror-select">GitHub 加速地址</label>
+              <select id="set-github-mirror-select" class="mirror-select" aria-label="GitHub 加速地址">
+                <option value="https://ghfast.top/">https://ghfast.top</option>
+                <option value="https://ghproxy.net/">https://ghproxy.net</option>
+                <option value="custom">手动输入</option>
+              </select>
+              <input id="set-github-mirror" class="setting-input-wide" type="url" spellcheck="false" placeholder="https://ghfast.top/" aria-label="手动输入的 GitHub 加速地址" hidden>
+            </div>
             <div class="setting-row ua-row">
               <label for="set-ua-suffix">User-Agent</label>
               <div class="ua-control">
