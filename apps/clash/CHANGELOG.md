@@ -1,3 +1,16 @@
+## [1.2.0]
+
+### Added
+
+- 设置页 GitHub 加速地址改为下拉选择，内置 `https://ghfast.top` 与 `https://ghproxy.net`，并支持手动输入自定义地址；PC 端手动输入框与其他地址输入框等宽。
+- 手机端新增运行状态卡右侧的独立代理模式入口，显示当前模式，点击后展开“规则 / 全局 / 直连”菜单。
+
+### Changed
+
+- 手机端底部导航放大图标与文字，提升触控目标；代理模式从运行状态框中移出，减少误触。
+- 手机端配置页的备份“恢复/删除”、连接页的“刷新/关闭全部连接”改为独占一行；测速网址和 GitHub 加速地址改为标签与控件分行。
+- 外部数据 GeoIP、GeoSite、Country MMDB 和 GeoLite2-ASN 的默认下载地址切换到 jsDelivr 镜像 `https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/`，文件名保持不变；升级时自动迁移仍在使用旧 GitHub 默认地址的配置，自定义地址和 Smart 模型地址不受影响。
+
 ## [1.1.1]
 
 ### Fixed
