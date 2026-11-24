@@ -33,11 +33,13 @@ mihomo 子进程（当前激活槽位）
 - 首次启动、校验或应用配置时，`progress.mjs` 记录「校验内核 / 准备外部数据 / 校验配置 / 启动内核」等阶段，下载外部数据时按 `content-length` 上报已接收字节；`GET /api/preparation` 与 `status.preparation` 暴露快照，页面在长操作期间按约 1 秒轮询，并在右下角浮动显示进度卡片（移动端位于底部导航上方），避免只看到「启动中」，同时不挤占配置页布局。同一时刻只有一条准备会话，嵌套调用（应用配置里的校验、启动）复用外层步骤，步骤只前进不回退。
 - 概览内存优先读取 Controller `/memory`，不可用时读取 Core 进程 `/proc/<pid>/status` 的 VmRSS，避免只显示“—”。
 - 所有出站请求（订阅下载、外部数据下载、Core 版本检查/下载、应用更新检查）统一经过 `manager.githubFetcher()`/repository 的 fetch 包装：`withUserAgent()` 移除调用方自带的 `user-agent`，写入由 `Mihomo/<内核版本>; ClashForFNOS/<应用版本>` 前缀加用户自定义后缀（默认 `clash.meta; clash`）组成的完整 User-Agent；前缀随内核切换和启动自动刷新，设置页展示生成的前缀。
+- 覆盖安装（不卸载旧版本）时 fnOS 会先停止应用，依次执行 `upgrade_init` → 替换 target → `upgrade_callback`，再重新启动应用。`upgrade_init` 在解包前运行、拿不到新包内容，因此不做文件校验（内置 Core 由管理进程启动时校验并在页面报错）；生命周期脚本一旦失败，原因必须写入 `TRIM_TEMP_LOGFILE`，否则应用中心只显示「执行脚本出错且原因未知」。
 - 日志中心对 Controller secret、`secret/password/token` 字段和 URL 查询参数脱敏；`logs/manager.log` 达到 2 MiB 时轮转为 `manager.log.1`。生命周期脚本另将管理进程标准输出写入 `logs/stdout.log`，避免与结构化日志并发写同一文件。
 
 ## Core 版本槽位
 
-- 应用包内置 `app/cores/x86_64/mihomo.gz` 与 `app/cores/arm64/mihomo.gz`，以及 `app/cores/geo/`。构建脚本按 `core-versions.lock` 下载并校验后写入 FPK，两份架构同时携带，保证任何构建机打出的包都能离线启动。
+- 应用包内置 `cores/x86_64/mihomo.gz` 与 `cores/arm64/mihomo.gz`，以及 `cores/geo/`。构建脚本按 `core-versions.lock` 下载并校验后写入构建目录的 `app/cores/`；打包时 `fnos.archPrune` 让每个 FPK 只携带目标架构的 Core，构建目录仍保留两份架构，任意构建机都能出包。
+- fnOS 把 FPK 的 payload 解到 `target/` 根目录，所以运行期和生命周期脚本看到的都是 `TRIM_APPDEST/cores/...`、`TRIM_APPDEST/bin/...`、`TRIM_APPDEST/main.mjs`；`app/` 前缀只存在于构建目录，不能写进 `cmd/` 脚本。
 - 首次启动时按设备架构校验 gzip SHA256、大小、解压后 ELF 架构，释放到 `var/cores/embedded/<version>-<arch>/`，并记录二进制哈希；旧内置版本目录自动清理。
 - 用户安装的版本位于 `var/cores/installed/<渠道-版本-架构>/`，`metadata.json` 记录来源、渠道、版本、架构、压缩包与二进制 SHA256、大小、发布时间和许可证。`cores/active.json` 是唯一生效指针，同时记录上一版本供回滚。
 - 版本安装是异步任务：下载到 `runtime/staging`。API 条目校验上游 SHA256/大小；GitHub 限流时从 releases Atom/`expanded_assets` 页面取资产，下载后计算 SHA256 并记录为 `verified=false`，再校验 gzip/ELF 并运行 `-v` 识别版本，通过后原子移动到正式目录。同一时刻只允许一个 Core 操作。
@@ -78,5 +80,5 @@ mihomo 子进程（当前激活槽位）
 - `api.github.com` 未认证请求受 IP 速率限制；内置 Core 和已安装版本不受影响。
 - 默认配置中的 provider `url` 默认为空，未填入时该提供商为空、`节点选择` 仍可直接使用 DIRECT；首次准备外部数据的耗时取决于 GitHub 与加速地址的实际速度，界面只展示进度，不能预先估算总时长。
 - 订阅只有节点列表时自动补齐的分组和规则是通用模板，不会根据机场节点做筛选或测速排序。
-- 升级会替换 `app/cores`，但不会删除私有数据；`cores/active.json` 指向已不存在的内置版本时自动回退到新内置版本。
+- 升级会替换 `cores/`，但不会删除私有数据；`cores/active.json` 指向已不存在的内置版本时自动回退到新内置版本。
 - 应用停止时是否保留资源链接、升级/卸载清理顺序、端口占用、跨账户访问和资源占用必须在 x86_64、ARM64 实机验收。

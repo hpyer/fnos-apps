@@ -1,11 +1,13 @@
 #!/bin/sh
 set -eu
-# Keep user configuration and installed cores across upgrades; only verify that
-# the packaged core slots exist.
-for arch in x86_64 arm64; do
-  [ -f "${TRIM_APPDEST}/app/cores/${arch}/mihomo.gz" ] || {
-    echo "升级包缺少 ${arch} 内置 Core" >&2
-    exit 1
-  }
-done
+# fnOS stops the app, replaces the target directory, keeps TRIM_PKGVAR and then
+# starts the app again. User configuration and installed cores are preserved by
+# the package layout, so there is nothing to migrate here.
+#
+# Do not validate the packaged payload in this hook: it runs before fnOS unpacks
+# the new files, so TRIM_APPDEST may still point at the previous install. An
+# earlier check for `app/cores/<arch>` (the build-directory layout) requiring
+# both architectures made every in-place upgrade fail with
+# 「执行脚本出错且原因未知」. The manager re-verifies the embedded core
+# (gzip SHA-256, ELF architecture) on start and reports problems in the page.
 exit 0

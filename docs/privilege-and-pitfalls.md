@@ -268,6 +268,19 @@ Clash 把“设置状态”和“实际状态”分开：
 
 ## 6. 应用生命周期与安装包
 
+### 踩坑：生命周期脚本按构建目录布局找文件，覆盖安装必失败
+
+现象：不卸载旧版本、直接安装新版本时，应用中心提示「无法更新 <应用>」「执行脚本出错且原因未知」；卸载后重新安装则一切正常。
+
+根因：Clash 的 `upgrade_init` 按**构建目录**布局检查 `${TRIM_APPDEST}/app/cores/x86_64/mihomo.gz` 和 `app/cores/arm64/mihomo.gz`。但 fnOS 把 FPK 中 `app/` 的 payload 解到 `target/` 根目录，安装后实际路径是 `target/cores/...`；同时 `fnos.archPrune` 让每个 FPK 只携带目标架构的 Core。两项检查因此必然失败，每次升级都在 `upgrade_init` 退出 1。脚本又只把原因写到 stderr，没有写 `TRIM_TEMP_LOGFILE`，界面只能显示「原因未知」。
+
+修正：
+
+- `cmd/` 下的脚本一律使用**安装后布局**：`target/cores`、`target/bin`、`target/main.mjs`，不要带构建目录的 `app/` 前缀。`build.mjs` 里的 `dist/<slug>/app/...` 只是源码产物布局。
+- `upgrade_init`/`install_init` 在 fnOS 解包前运行，看不到新包内容，也不应因为文件缺失返回非零；内置 Core 由管理进程启动时校验并在页面报错。校验按目标架构或「至少存在一个」进行，不要要求两个架构同时存在（打包时会按架构裁剪）。
+- 生命周期脚本失败时，把原因写入 `${TRIM_TEMP_LOGFILE:-/dev/stderr}`，否则用户只能看到「执行脚本出错且原因未知」。
+- 本机验证：从 FPK 中解出 `app.tgz`（`tar -xzOf <fpk> app.tgz | tar -xzf -`），把解包目录设为 `TRIM_APPDEST` 后直接运行 `cmd/` 脚本，即可复现真实安装布局；Clash 的 `test/lifecycle.test.mjs` 覆盖了这条路径。
+
 ### 踩坑：卸载后残留系统状态
 
 卸载时不仅要删应用数据，还要考虑：

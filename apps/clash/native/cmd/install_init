@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
-# Embedded cores are shipped compressed and read-only; the manager extracts them
-# into the private runtime directory before use.
-for file in "${TRIM_APPDEST}"/app/cores/*/mihomo.gz; do
-  [ -f "$file" ] && chmod 0444 "$file"
-done
+# fnOS unpacks the FPK payload and owns the install lifecycle. Embedded cores are
+# already shipped read-only (0444) by build.mjs and the installed layout exposes
+# them at `target/cores/...`, so this hook has nothing to change.
 exit 0
