@@ -1,6 +1,26 @@
 {
+  "schema": 1,
   "version": "2.93",
   "source": "https://thekelleys.org.uk/dnsmasq/dnsmasq-2.93.tar.xz",
+  "sourceSha256": "0c00d4e5c97c8306e5fb932b348b34269c9c29a0e7df0e8e82958b407092bc19",
   "license": "GPL-2.0-or-later",
-  "sha256": "0f5bb70fc6386939aa1e38004250c6db33f8c23f5b560ee96ae069e8eda381bb"
+  "licenseFile": {
+    "url": "https://github.com/hpyer/fnos-apps/releases/download/dnsmasq-runtime-2.93/COPYING-dnsmasq-2.93",
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+    "size": 18092
+  },
+  "assets": {
+    "x86_64": {
+      "url": "https://github.com/hpyer/fnos-apps/releases/download/dnsmasq-runtime-2.93/dnsmasq-2.93-debian12-x86_64",
+      "sha256": "0f5bb70fc6386939aa1e38004250c6db33f8c23f5b560ee96ae069e8eda381bb",
+      "size": 460824,
+      "elfMachine": 62
+    },
+    "arm64": {
+      "url": "https://github.com/hpyer/fnos-apps/releases/download/dnsmasq-runtime-2.93/dnsmasq-2.93-debian12-arm64",
+      "sha256": "8d32a3762dac59ecae34f9aba5b5c589fe8de72a15bbebfbe54d2702cc46a017",
+      "size": 441456,
+      "elfMachine": 183
+    }
+  }
 }

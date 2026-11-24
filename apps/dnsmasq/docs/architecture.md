@@ -6,6 +6,10 @@
 
 Socket 模式下管理服务只信任飞牛网关注入的 `x-trim-userid` 与 `x-trim-isadmin` 请求头；只有未设置 `TRIM_APPDEST` 的本机开发模式才按回环 Host 校验，避免把网关请求误判为非管理员。管理员授权请求优先使用网关注入的 `x-trim-username`（权威登录名），仅当它缺失或不是可用的 Linux 账户名时才按 UID 查询 `/etc/passwd`，用于一次 `su` 提权。
 
+## 运行时与版本
+
+`core-versions.lock` 固定 dnsmasq 版本、源码地址与校验值、许可证，以及 x86_64/arm64 运行时资产的大小、SHA-256 和 ELF 架构。`pnpm run build dnsmasq` 通过 `scripts/runtime.mjs` 优先复用 `.local/runtime/` 缓存，否则从固定 Release 下载并校验后写入 `app/bin/dnsmasq` 和 `app/bin/COPYING-dnsmasq`，同时生成 `app/dnsmasq-version`。`DNSMASQ_BINARY` 覆盖同样要通过锁文件校验，避免把 Ubuntu 24.04（glibc 2.39）构建的二进制打进 Debian 12 的 fnOS 包。
+
 ## 配置模型
 
 `state.json` 保存监听地址、上游 DNS、缓存大小、查询日志和自动启动选项；`records.json` 保存精确记录和后缀记录。管理服务校验所有 IP、域名和记录类型后，以临时文件加 rename 的方式生成 `runtime/dnsmasq.conf`。启动前调用 `dnsmasq --test`，校验通过才启动前台进程。
