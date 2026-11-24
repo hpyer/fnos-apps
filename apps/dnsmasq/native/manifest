@@ -1,5 +1,5 @@
 appname = dnsmasq-for-fnos
-version = 0.1.0
+version = 1.0.0
 display_name = Dnsmasq for fnOS
 desc = Dnsmasq for fnOS
 platform = x86
