@@ -10,15 +10,22 @@ function json(response, status, value) { response.writeHead(status, { ...HEADERS
 async function body(request) { const chunks = []; let size = 0; for await (const chunk of request) { size += chunk.length; if (size > 1024 * 1024) throw new AppError('请求内容过大', 413); chunks.push(chunk); } if (!chunks.length) return {}; try { return JSON.parse(Buffer.concat(chunks)); } catch { throw new AppError('请求不是有效 JSON'); } }
 function admin(request, server, dev) { if (request.headers['sec-fetch-site'] === 'cross-site') return false; if (dev) return request.headers.host === `127.0.0.1:${server.address().port}`; return /^\d+$/.test(request.headers['x-trim-userid'] || '') && request.headers['x-trim-isadmin'] === 'true'; }
 
+// 与 packages/privilege 的 runAsLoginUser 保持一致：只接受可安全用于 su 的账户名。
+const LOGIN_USER = /^[A-Za-z_][A-Za-z0-9_.-]{0,31}$/;
+
 async function gatewayUser(request) {
+  // 网关注入的 x-trim-username 是权威登录名，必须优先使用；先查 /etc/passwd 会在
+  // 非 fnOS 环境（CI、容器）把同 UID 的无关账户当成登录用户。
+  const header = String(request.headers['x-trim-username'] || '').slice(0, 64);
+  if (LOGIN_USER.test(header)) return header;
   const uid = String(request.headers['x-trim-userid'] || '');
   if (/^\d+$/.test(uid)) {
     try {
       const passwd = await readFile('/etc/passwd', 'utf8');
-      for (const line of passwd.split('\n')) { const fields = line.split(':'); if (fields[2] === uid) return fields[0]; }
+      for (const line of passwd.split('\n')) { const fields = line.split(':'); if (fields[2] === uid && LOGIN_USER.test(fields[0])) return fields[0]; }
     } catch { /* /etc/passwd unavailable */ }
   }
-  return String(request.headers['x-trim-username'] || '').slice(0, 64);
+  return header;
 }
 
 export async function serve(manager, { assets, socket = '', devPort } = {}) {

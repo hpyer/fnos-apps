@@ -134,6 +134,7 @@ test('凭据通道加密传输管理员密码并转发初始化请求', async t 
     body: JSON.stringify({ encryptedCredential }),
   });
   assert.equal(response.status, 200);
+  // 网关请求头是权威用户名；CI 等环境的 UID 1000 可能属于无关系统账户，不能覆盖它。
   assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: 'admin-secret', user: 'admin' }]);
 });
 
@@ -141,20 +142,20 @@ test('初始化接口拒绝未经凭据通道的明文密码', async t => {
   const { socket, manager } = await fixture(t);
   const response = await socketRequest(socket, '/api/privilege/init', {
     method: 'POST',
-    headers: { ...ADMIN, 'content-type': 'application/json', 'x-fnos-request': '1' },
+    headers: { ...ADMIN, 'x-trim-username': 'admin', 'content-type': 'application/json', 'x-fnos-request': '1' },
     body: JSON.stringify({ password: 'plain' }),
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: '', user: '' }]);
+  assert.deepEqual(manager.calls.at(-1), ['initializeServiceMode', { password: '', user: 'admin' }]);
 });
 
 test('hosts 同步接口走专用的受控操作', async t => {
   const { socket, manager } = await fixture(t);
   const response = await socketRequest(socket, '/api/hosts/sync', {
     method: 'POST',
-    headers: { ...ADMIN, 'content-type': 'application/json', 'x-fnos-request': '1' },
+    headers: { ...ADMIN, 'x-trim-username': 'admin', 'content-type': 'application/json', 'x-fnos-request': '1' },
     body: JSON.stringify({ enabled: true }),
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(manager.calls.at(-1), ['setHostsSync', true, { password: '', user: '' }]);
+  assert.deepEqual(manager.calls.at(-1), ['setHostsSync', true, { password: '', user: 'admin' }]);
 });

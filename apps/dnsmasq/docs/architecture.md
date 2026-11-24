@@ -4,7 +4,7 @@
 
 管理服务运行在 package 用户下，通过 Unix socket 提供 fnOS 网关界面；dnsmasq 作为同一 package 用户的受控子进程运行。只有绑定低端口所需的 `CAP_NET_BIND_SERVICE` 由应用专属 root helper 设置。应用不提供 DHCP，不修改默认路由、NAT 或 `/etc/resolv.conf`。可选的 NAS hosts 同步只维护 `/etc/hosts` 标记块，不接管系统 DNS。
 
-Socket 模式下管理服务只信任飞牛网关注入的 `x-trim-userid` 与 `x-trim-isadmin` 请求头；只有未设置 `TRIM_APPDEST` 的本机开发模式才按回环 Host 校验，避免把网关请求误判为非管理员。管理员授权请求从 `x-trim-username`（或按 UID 查询 `/etc/passwd`）取得登录用户名，用于一次 `su` 提权。
+Socket 模式下管理服务只信任飞牛网关注入的 `x-trim-userid` 与 `x-trim-isadmin` 请求头；只有未设置 `TRIM_APPDEST` 的本机开发模式才按回环 Host 校验，避免把网关请求误判为非管理员。管理员授权请求优先使用网关注入的 `x-trim-username`（权威登录名），仅当它缺失或不是可用的 Linux 账户名时才按 UID 查询 `/etc/passwd`，用于一次 `su` 提权。
 
 ## 配置模型
 
