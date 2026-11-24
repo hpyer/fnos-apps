@@ -24,7 +24,7 @@ function socketRequest(socket, pathname, { headers = {}, method = 'GET', body } 
 function createManager() {
   const calls = [];
   const manager = { calls, running: false };
-  manager.status = () => ({ running: manager.running, pid: 0, startedAt: 0, lastError: '', settings: { listenAddresses: ['127.0.0.1'], upstreams: ['8.8.8.8'], cacheSize: 1000, queryLogging: false, autoStart: false }, records: [], platformSupported: true, localAddresses: [] });
+  manager.status = () => ({ running: manager.running, pid: 0, startedAt: 0, lastError: '', dnsmasqVersion: '2.93', settings: { listenAddresses: ['127.0.0.1'], upstreams: ['8.8.8.8'], cacheSize: 1000, queryLogging: false, autoStart: false }, records: [], platformSupported: true, localAddresses: [] });
   manager.config = async () => ({ source: 'server=8.8.8.8', path: '/tmp/dnsmasq.conf' });
   manager.diagnostics = async () => ({ running: manager.running, binary: '/missing/dnsmasq' });
   manager.saveSettings = async input => { calls.push(['saveSettings', input]); return manager.status(); };
@@ -72,10 +72,12 @@ test('socket 模式只接受飞牛网关注入的管理员身份', async t => {
   assert.match(page.text, /<script[^>]*src="\.\/index\.js"/);
   // 诊断默认收在概览里，只保留一个按钮，不再单独占一个导航页。
   assert.match(page.text, /id="diagnose"/);
+  assert.match(page.text, /id="version-summary"/);
   assert.doesNotMatch(page.text, /data-page="diagnostics"/);
   const status = await socketRequest(socket, '/api/status', { headers: ADMIN });
   assert.equal(status.status, 200);
   assert.equal(JSON.parse(status.text).running, false);
+  assert.equal(JSON.parse(status.text).dnsmasqVersion, '2.93');
 });
 
 test('样式与脚本以正确的 MIME 类型返回且非空', async t => {

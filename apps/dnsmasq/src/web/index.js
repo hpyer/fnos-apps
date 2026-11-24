@@ -75,6 +75,7 @@ function renderStatus(status) {
   state.status = status;
   const running = Boolean(status.running);
   $('#service-state').textContent = running ? '运行中' : '已停止';
+  $('#version-summary').textContent = status.dnsmasqVersion ? `dnsmasq ${status.dnsmasqVersion}` : 'dnsmasq 版本未知';
   $('#status-dot').className = `dot ${running ? 'on' : status.lastError ? 'error' : ''}`;
   $('#top-detail').textContent = running ? `PID ${status.pid} · ${formatStarted(status.startedAt)} 启动` : '服务未运行';
   if (running) $('#service-detail').textContent = 'dnsmasq 正在提供 DNS 解析服务';
@@ -194,7 +195,7 @@ function renderDiagnostics(data) {
   diagnosticRow(list, '运行权限', data.helperReady ? '已初始化' : '未初始化', data.helperReady ? 'ok' : 'warn');
   diagnosticRow(list, '53 端口能力', data.capability === true ? '已授予' : data.capability === false ? '未授予' : '未知', data.capability === true ? 'ok' : data.capability === false ? 'warn' : '');
   diagnosticRow(list, '运行平台', `${data.platform}${data.platformSupported ? '' : '（不支持）'}`, data.platformSupported ? '' : 'warn');
-  diagnosticRow(list, 'dnsmasq', `${data.binary}${data.binaryExists ? '' : '（缺失）'}`, data.binaryExists ? '' : 'bad');
+  diagnosticRow(list, 'dnsmasq', `${data.dnsmasqVersion ? `v${data.dnsmasqVersion} · ` : ''}${data.binary}${data.binaryExists ? '' : '（缺失）'}`, data.binaryExists ? '' : 'bad');
   diagnosticRow(list, 'NAS hosts', !data.settings?.hostsSync ? '未启用' : data.hostsSyncActive ? '已同步' : '已启用，未写入', !data.settings?.hostsSync ? '' : data.hostsSyncActive ? 'ok' : 'warn');
   if (data.capabilityError) diagnosticRow(list, '权限错误', data.capabilityError, 'bad');
   if (data.hostsSyncError) diagnosticRow(list, 'hosts 错误', data.hostsSyncError, 'bad');

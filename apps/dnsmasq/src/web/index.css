@@ -67,6 +67,7 @@ button.danger:hover:not(:disabled) { border-color: #dda3a9; background: #fdf6f6;
 
 .status-panel { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(0, 1.6fr); align-items: center; gap: 24px; }
 .status-copy h2 { font-size: 24px; line-height: 1.2; margin: 2px 0 5px; }
+.version-line { margin-top: 7px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 0; }
 .metrics dt { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 .metrics dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }

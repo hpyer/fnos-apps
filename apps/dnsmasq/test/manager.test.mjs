@@ -53,6 +53,25 @@ test('starts in keep-in-foreground mode without debug query logging', async () =
   assert.equal(manager.status().running, false);
 });
 
+test('shows the packaged dnsmasq version and refreshes it from the startup banner', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-dnsmasq-version-'));
+  const appRoot = await mkdtemp(path.join(os.tmpdir(), 'fnos-dnsmasq-app-'));
+  await writeFile(path.join(appRoot, 'dnsmasq-version'), '2.93\n');
+  const binary = path.join(appRoot, 'dnsmasq');
+  await writeFile(binary, `#!/bin/sh\necho 'dnsmasq[1]: started, version 2.94 cachesize 1000' >&2\nexec sleep 30\n`);
+  await chmod(binary, 0o755);
+  const manager = new DnsmasqManager(root, { appRoot, binary, platform: 'linux', arch: 'x64', run: async () => '', privilegedHelperDir: path.join(root, 'helpers') });
+  try {
+    await manager.init();
+    assert.equal(manager.status().dnsmasqVersion, '2.93');
+    await manager.start();
+    assert.equal(manager.status().dnsmasqVersion, '2.94');
+  } finally {
+    await manager.stop();
+    await manager.close();
+  }
+});
+
 test('reports missing 53 capability instead of a bare exit status', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'fnos-dnsmasq-denied-'));
   const binary = path.join(root, 'dnsmasq');

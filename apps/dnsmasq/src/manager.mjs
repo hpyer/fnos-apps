@@ -64,9 +64,15 @@ export class DnsmasqManager extends EventEmitter {
     this.privilege = new PrivilegeBroker({ helperDir: privilegedHelperDir, run });
     this.stateFile = path.join(root, 'state.json'); this.recordsFile = path.join(root, 'records.json'); this.runtimeDir = path.join(root, 'runtime'); this.configFile = path.join(this.runtimeDir, 'dnsmasq.conf'); this.pidFile = path.join(this.runtimeDir, 'dnsmasq.pid'); this.hostsSnippetFile = path.join(this.runtimeDir, HOSTS_SNIPPET); this.logFile = path.join(root, 'logs/dnsmasq.log');
     this.settings = { ...DEFAULT_SETTINGS }; this.records = []; this.child = null; this.lastError = ''; this.lastOutput = ''; this.startedAt = 0; this.closed = false; this.stopping = false; this.queue = Promise.resolve();
-    this.helperReady = false; this.capability = null; this.capabilityError = ''; this.hostsSyncActive = false; this.hostsSyncError = '';
+    this.helperReady = false; this.capability = null; this.capabilityError = ''; this.hostsSyncActive = false; this.hostsSyncError = ''; this.binaryVersion = '';
   }
-  async init() { await ensureDir(this.root); await ensureDir(this.runtimeDir); await ensureDir(path.join(this.root, 'logs')); this.settings = validateSettings({ ...DEFAULT_SETTINGS, ...(await readJSON(this.stateFile, {})) }); this.records = normalizeRecords(await readJSON(this.recordsFile, [])); await this.writeRuntimeConfig(); await this.refreshPrivilegeState().catch(() => {}); await this.refreshHostsSyncState().catch(() => {}); if (this.settings.hostsSync) { await this.syncHostsSnippet().catch(error => { this.hostsSyncError = String(error.message || error).slice(0, 300); }); } }
+  async init() { await ensureDir(this.root); await ensureDir(this.runtimeDir); await ensureDir(path.join(this.root, 'logs')); this.settings = validateSettings({ ...DEFAULT_SETTINGS, ...(await readJSON(this.stateFile, {})) }); this.records = normalizeRecords(await readJSON(this.recordsFile, [])); this.binaryVersion = await this.readBundledVersion(); await this.writeRuntimeConfig(); await this.refreshPrivilegeState().catch(() => {}); await this.refreshHostsSyncState().catch(() => {}); if (this.settings.hostsSync) { await this.syncHostsSnippet().catch(error => { this.hostsSyncError = String(error.message || error).slice(0, 300); }); } }
+
+  /** The packaged runtime version, replaced by the real startup banner once dnsmasq runs. */
+  async readBundledVersion() {
+    if (!this.appRoot) return '';
+    return (await readFile(path.join(this.appRoot, 'dnsmasq-version'), 'utf8').catch(() => '')).trim().slice(0, 32);
+  }
   exclusive(task) { const next = this.queue.then(task, task); this.queue = next.catch(() => {}); return next; }
   async writeRuntimeConfig() { await atomicWrite(this.configFile, renderConfig(this.settings, this.records, { pidFile: this.pidFile }), 0o600); }
   async saveSettings(input) { return this.exclusive(async () => { this.settings = validateSettings({ ...input, hostsSync: this.settings.hostsSync }); await atomicJSON(this.stateFile, this.settings); await this.writeRuntimeConfig(); if (this.running()) await this.restartInternal(); return this.status(); }); }
@@ -221,6 +227,8 @@ export class DnsmasqManager extends EventEmitter {
       buffer = (buffer + text).slice(-8192);
       appendFile(this.logFile, text, { mode: 0o600 }).then(() => chmod(this.logFile, 0o600)).catch(() => {});
       this.emit('log', text);
+      const version = /started, version\s+([^\s,]+)/i.exec(buffer)?.[1];
+      if (version) this.binaryVersion = version.slice(0, 32);
       if (STARTUP_MARKER.test(buffer)) settle({ ok: true });
     };
     child.stdout.on('data', onOutput); child.stderr.on('data', onOutput);
@@ -282,7 +290,7 @@ export class DnsmasqManager extends EventEmitter {
   async restartInternal() { await this.stopInternal(); return this.startInternal(); }
   async restart() { return this.exclusive(() => this.restartInternal()); }
   async close() { this.closed = true; await this.stopInternal(); this.emit('status'); }
-  status() { return { running: this.running(), pid: this.child?.pid || 0, startedAt: this.startedAt, lastError: this.lastError, settings: this.settings, records: this.records, platformSupported: this.platformSupported(), localAddresses: [...localAddresses()], helperReady: this.helperReady, capability: this.capability, capabilityError: this.capabilityError, hostsSyncActive: this.hostsSyncActive, hostsSyncError: this.hostsSyncError }; }
+  status() { return { running: this.running(), pid: this.child?.pid || 0, startedAt: this.startedAt, lastError: this.lastError, dnsmasqVersion: this.binaryVersion, settings: this.settings, records: this.records, platformSupported: this.platformSupported(), localAddresses: [...localAddresses()], helperReady: this.helperReady, capability: this.capability, capabilityError: this.capabilityError, hostsSyncActive: this.hostsSyncActive, hostsSyncError: this.hostsSyncError }; }
 
   async diagnostics() {
     await this.refreshPrivilegeState().catch(() => {});
