@@ -1,5 +1,5 @@
 appname = clash-for-fnos
-version = 1.2.0
+version = 1.2.1
 display_name = Clash for fnOS
 desc = 以应用用户托管 mihomo，提供内置 Core、订阅、代理组、连接、日志与版本管理。
 platform = x86
