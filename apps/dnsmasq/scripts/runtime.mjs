@@ -94,6 +94,7 @@ async function fetchBuffer(url, { fetchImpl, maxSize, retries = 3 }) {
     }
     if (!response.ok) {
       if (response.status >= 500 && retries > 0) return fetchBuffer(url, { fetchImpl, maxSize, retries: retries - 1 });
+      if (response.status === 404) throw Error('下载失败：HTTP 404（运行时 Release 资产缺失；请恢复 core-versions.lock 中记录的 Release 与资产）');
       throw Error(`下载失败：HTTP ${response.status}`);
     }
     const declared = Number(response.headers.get('content-length'));

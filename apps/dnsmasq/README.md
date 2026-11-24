@@ -39,6 +39,7 @@ dnsmasq 以应用包用户运行，绑定 53 端口需要 `CAP_NET_BIND_SERVICE`
 `pnpm run build dnsmasq` 会从 `core-versions.lock` 记录的运行时 Release 下载 Debian 12 构建的 dnsmasq 2.93（按构建机架构选择 x86_64 或 arm64），校验大小、SHA-256 和 ELF 架构后打入 FPK；下载内容缓存于 `.local/runtime/`。
 
 - 运行时必须在 Debian 12（glibc 2.36）构建。Ubuntu 24.04 编译出的二进制要求 `GLIBC_2.38`，在 fnOS 上会报 `GLIBC_2.38 not found`，不能用于发布。
+- `dnsmasq-runtime-<version>` Release 是构建依赖，必须保留；删除其资产会导致 CI 和发布构建因 HTTP 404 失败。
 - 需要验证自定义构建时，使用 `DNSMASQ_BINARY=/path/to/dnsmasq pnpm run build dnsmasq`；该二进制仍须匹配锁文件记录的 SHA-256 和目标架构，否则构建失败。
 - 更新 dnsmasq 版本时，先运行 `node apps/dnsmasq/scripts/build-dnsmasq.mjs <arch>` 生成运行时，再把产物、许可证和校验值发布到 `dnsmasq-runtime-<version>` Release 并更新 `core-versions.lock`。运行时 Release 的 tag 不要包含 `/v`，避免被应用发布 workflow 匹配。
 

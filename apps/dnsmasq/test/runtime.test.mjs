@@ -107,6 +107,15 @@ test('verifies an explicit DNSMASQ_BINARY against the lock', async t => {
   await assert.rejects(() => ensureEmbeddedDnsmasq({ arch: 'x64', binary: supplied, lockPath, cacheDir, fetchImpl, log: () => {} }), /DNSMASQ_BINARY/);
 });
 
+test('explains a missing runtime release asset', async t => {
+  const { lockPath, cacheDir } = await fixture(t);
+  const fetchImpl = async () => ({ ok: false, status: 404, headers: new Headers(), arrayBuffer: async () => new ArrayBuffer(0) });
+  await assert.rejects(
+    () => ensureEmbeddedDnsmasq({ arch: 'x64', lockPath, cacheDir, fetchImpl, log: () => {} }),
+    /HTTP 404.*core-versions\.lock/,
+  );
+});
+
 test('rejects an incomplete lock file', async t => {
   const { lockPath } = await fixture(t);
   const broken = JSON.parse(await readFile(lockPath, 'utf8'));

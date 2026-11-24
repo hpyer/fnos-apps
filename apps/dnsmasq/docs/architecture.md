@@ -8,7 +8,7 @@ Socket 模式下管理服务只信任飞牛网关注入的 `x-trim-userid` 与 `
 
 ## 运行时与版本
 
-`core-versions.lock` 固定 dnsmasq 版本、源码地址与校验值、许可证，以及 x86_64/arm64 运行时资产的大小、SHA-256 和 ELF 架构。`pnpm run build dnsmasq` 通过 `scripts/runtime.mjs` 优先复用 `.local/runtime/` 缓存，否则从固定 Release 下载并校验后写入 `app/bin/dnsmasq` 和 `app/bin/COPYING-dnsmasq`，同时生成 `app/dnsmasq-version`。`DNSMASQ_BINARY` 覆盖同样要通过锁文件校验，避免把 Ubuntu 24.04（glibc 2.39）构建的二进制打进 Debian 12 的 fnOS 包。
+`core-versions.lock` 固定 dnsmasq 版本、源码地址与校验值、许可证，以及 x86_64/arm64 运行时资产的大小、SHA-256 和 ELF 架构。`pnpm run build dnsmasq` 通过 `scripts/runtime.mjs` 优先复用 `.local/runtime/` 缓存，否则从固定 Release 下载并校验后写入 `app/bin/dnsmasq` 和 `app/bin/COPYING-dnsmasq`，同时生成 `app/dnsmasq-version`。该 Release 是构建依赖，必须保留；资产被删除时构建会因 HTTP 404 失败。`DNSMASQ_BINARY` 覆盖同样要通过锁文件校验，避免把 Ubuntu 24.04（glibc 2.39）构建的二进制打进 Debian 12 的 fnOS 包。
 
 概览页显示 `dnsmasq <版本>`：服务未运行时使用打包时写入的版本，运行后以启动横幅中的实际版本为准；诊断中同时显示版本和二进制路径。
 
