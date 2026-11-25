@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, chmod, copyFile, lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { UpdateChecker } from '@fnos/version-check';
 import { OfficialRepository, channelName } from './official.mjs';
@@ -336,7 +336,15 @@ export class NginxManager {
     const entry = await this.repository.latest(channel);
     versionName(entry.version);
     const directory = path.join(this.versions, entry.version);
-    try { await access(directory); throw Error('该版本已安装'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    // 首次安装会自动启用，切换过程可能让客户端收不到响应并重试；
+    // 已安装且校验记录完整时按成功返回，避免重复下载，也避免把已完成的操作报成失败。
+    if (await exists(directory)) {
+      if (!/^[a-f0-9]{64}$/.test(this.state.trustedVersions[entry.version] || '')) await rm(directory, { recursive: true, force: true });
+      else {
+        this.state.channel = channel; await this.saveState();
+        return { version: entry.version, channel, installed: true, message: '该版本已安装' };
+      }
+    }
     const stage = path.join(this.root, `download-${randomUUID()}`);
     await mkdir(stage, { mode: 0o700 });
     try {
@@ -383,7 +391,11 @@ export class NginxManager {
     } finally { await rm(stage, { recursive: true, force: true }); }
   }); }
   async activateVersionNow(version) {
-    versionName(version); await this.ensureRuntime(version); await this.validate(this.config, version);
+    versionName(version);
+    // 管理页可能经本应用的 Nginx 访问，切换时连接会中断并可能触发客户端重试；
+    // 目标版本已在运行时按成功返回，避免重复停止和启动。
+    if (this.state.activeVersion === version && this.child && await processAlive(this.child.pid)) return { activeVersion: version, unchanged: true };
+    await this.ensureRuntime(version); await this.validate(this.config, version);
     const previous = this.state.activeVersion;
     await this.stop(); this.state.activeVersion = version;
     try { await this.start(); }

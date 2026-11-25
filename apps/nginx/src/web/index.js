@@ -4,37 +4,50 @@ import { watchAppUpdates } from '@fnos/version-check/client';
 const BASE = '/app/nginx-for-fnos';
 const $ = id => document.getElementById(id);
 let selected = '', status = null, latest = null;
+// 管理页可能经本应用的 Nginx 代理访问：启用其他版本或重启会短暂中断连接，
+// 客户端按退避重试，服务恢复后即可拿到结果，避免误报“Failed to fetch”。
+// 服务端对切换/安装做了幂等处理，重试不会重复停止或重新下载。
+const RECONNECT_DELAYS = [300, 600, 1200, 2000, 3000, 4000];
+async function request(url, options, delays = RECONNECT_DELAYS) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fetch(url, options); }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      // 不重试时保留原始错误，交给调用方按自己的方式恢复。
+      if (!delays.length) throw error;
+      if (attempt >= delays.length) throw Error('与 Nginx 管理服务的连接已中断，请刷新页面查看最新状态');
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
 function notify(content, type = 'info', duration) {
   const options = { content, type, container: document.querySelector('dialog[open]') || document.body };
   if (duration !== undefined) options.duration = duration;
   return toast(options);
 }
-async function api(action, input = {}) {
-  const response = await fetch(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) });
+async function api(action, input = {}, { retry = true } = {}) {
+  const response = await request(`${BASE}/api/${action}`, { method: 'POST', headers: { 'x-fnos-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(input) }, retry ? RECONNECT_DELAYS : []);
   const data = await response.json();
   if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
   return data;
 }
 async function get(action, query = '') {
-  const response = await fetch(`${BASE}/api/${action}${query}`, { cache: 'no-store' });
+  const response = await request(`${BASE}/api/${action}${query}`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw Error(data.error || `请求失败：${response.status}`);
   return data;
 }
 async function run(task, success, closeDialogId = '') {
   const pending = notify('正在处理…', 'info', 0);
-  try {
-    const result = await task();
-    await refresh();
-    pending.close();
-    if (closeDialogId) $(closeDialogId).close();
-    notify(result?.warning || result?.message || success, result?.warning ? 'warning' : 'success');
-    return result;
-  } catch (error) {
-    pending.close();
-    notify(error.message, 'error');
-    return null;
-  }
+  let result;
+  try { result = await task(); }
+  catch (error) { pending.close(); notify(error.message, 'error'); return null; }
+  pending.close();
+  if (closeDialogId) $(closeDialogId).close();
+  notify(result?.warning || result?.message || success, result?.warning ? 'warning' : 'success');
+  // 成功结果先提示，刷新失败不应把已生效的操作报成错误。
+  try { await refresh(); } catch (error) { notify(error.message, 'error'); }
+  return result;
 }
 function renderLatest() {
   const channel = $('channel').value;
@@ -126,7 +139,15 @@ $('cancel-config').addEventListener('click', () => $('config-dialog').close());
 $('save-config').addEventListener('click', () => run(() => api('config/save', { source: $('config-source').value }), '主配置已校验并保存', 'config-dialog'));
 $('start').addEventListener('click', () => run(() => api('service/start'), 'Nginx 已启动'));
 $('stop').addEventListener('click', () => { if (confirm('确定停止 Nginx 吗？')) run(() => api('service/stop'), 'Nginx 已停止'); });
-$('restart').addEventListener('click', () => { if (confirm('确定重启 Nginx 吗？')) run(() => api('service/restart'), 'Nginx 已重启'); });
+// 重启不重发请求：连接中断说明重启已开始，等待服务恢复后以实际状态为准，避免重复重启。
+$('restart').addEventListener('click', () => { if (confirm('确定重启 Nginx 吗？')) run(async () => {
+  try { return await api('service/restart', {}, { retry: false }); }
+  catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    if ((await get('status')).running) return { message: '连接短暂中断，Nginx 已重新启动' };
+    throw Error('连接已中断且 Nginx 未运行，请刷新页面查看状态');
+  }
+}, 'Nginx 已重启'); });
 $('reload').addEventListener('click', () => run(() => api('reload'), '配置已校验并发送平滑重载'));
 $('channel').addEventListener('change', () => { latest = null; renderLatest(); checkVersion(); });
 async function checkVersion() {

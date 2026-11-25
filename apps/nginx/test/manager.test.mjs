@@ -32,6 +32,18 @@ test('重启只允许运行中的 Nginx，并按停止、启动顺序执行', as
   assert.deepEqual(calls, ['stop', 'start']);
 });
 
+test('重复启用正在运行的版本按成功返回且不再次重启', async t => {
+  const manager = await fixture(t);
+  manager.state.activeVersion = '1.30.5';
+  manager.child = { pid: process.pid };
+  const calls = [];
+  manager.stop = async () => { calls.push('stop'); manager.child = null; };
+  manager.start = async () => { calls.push('start'); };
+  assert.deepEqual(await manager.activateVersion('1.30.5'), { activeVersion: '1.30.5', unchanged: true });
+  assert.deepEqual(calls, []);
+  assert.equal(manager.state.activeVersion, '1.30.5');
+});
+
 test('官方版本检查通过自定义来源查询指定通道', async t => {
   const channels = [];
   const manager = await fixture(t, { repository: { latest: async channel => {
@@ -233,7 +245,12 @@ test('官方版本下载后校验架构，安装失败不保留版本目录', as
   assert.equal(installed.version, '1.30.5');
   assert.equal(installed.autoActivated, false);
   assert.equal(manager.state.activeVersion, '1.28.0');
-  await assert.rejects(manager.installOfficial('stable'), /已安装/);
+  assert.deepEqual(await manager.installOfficial('stable'), { version: '1.30.5', channel: 'stable', installed: true, message: '该版本已安装' });
+
+  delete manager.state.trustedVersions['1.30.5'];
+  const repaired = await manager.installOfficial('stable');
+  assert.equal(repaired.version, '1.30.5');
+  assert.match(manager.state.trustedVersions['1.30.5'], /^[a-f0-9]{64}$/);
 });
 
 test('首次安装自动启用，失败时保留下载版本供重试', async t => {
